@@ -3,9 +3,11 @@
 namespace App\Http\Controllers;
 
 use App\Http\Controllers\Concerns\ApiResponse;
-use App\Http\Requests\Super\StoreClinicRequest;
+use App\Http\Requests\Clinic\StoreClinicWithAdminRequest;
+use App\Http\Requests\Clinic\UpdateClinicRequest;
 use App\Models\Clinic;
 use App\Models\User;
+use Illuminate\Database\QueryException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
 
@@ -15,10 +17,22 @@ class SuperClinicController extends Controller
 
     public function index(): JsonResponse
     {
-        return $this->successResponse(Clinic::query()->latest()->get(), 'Clínicas listadas.');
+        $clinics = Clinic::query()
+            ->withCount(['users', 'appointments'])
+            ->latest()
+            ->paginate(15);
+
+        return $this->successResponse($clinics, 'Clinics listed.');
     }
 
-    public function store(StoreClinicRequest $request): JsonResponse
+    public function show(Clinic $clinic): JsonResponse
+    {
+        $clinic->loadCount(['users', 'appointments']);
+
+        return $this->successResponse($clinic, 'Clinic retrieved.');
+    }
+
+    public function store(StoreClinicWithAdminRequest $request): JsonResponse
     {
         $payload = $request->validated();
 
@@ -41,9 +55,35 @@ class SuperClinicController extends Controller
                 'status' => true,
             ]);
 
-            return compact('clinic', 'admin');
+            return [
+                'clinic' => $clinic,
+                'admin' => $admin,
+            ];
         });
 
-        return $this->successResponse($result, 'Clínica y admin creados.', 201);
+        return $this->successResponse($result, 'Clinic created.', 201);
+    }
+
+    public function update(UpdateClinicRequest $request, Clinic $clinic): JsonResponse
+    {
+        $clinic->fill($request->validated());
+        $clinic->save();
+
+        return $this->successResponse($clinic->fresh(), 'Clinic updated.');
+    }
+
+    public function destroy(Clinic $clinic): JsonResponse
+    {
+        try {
+            $clinic->delete();
+        } catch (QueryException) {
+            return $this->errorResponse(
+                'Clinic cannot be deleted because it has related records.',
+                ['clinic' => ['Delete related appointments or records before deleting this clinic.']],
+                409
+            );
+        }
+
+        return $this->successResponse([], 'Clinic deleted.');
     }
 }

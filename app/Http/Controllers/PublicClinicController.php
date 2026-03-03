@@ -12,8 +12,11 @@ class PublicClinicController extends Controller
 
     public function index(): JsonResponse
     {
-        $clinics = Clinic::query()->where('status', true)->get();
+        $clinics = Clinic::query()
+            ->where('status', true)
+            ->orderBy('name')
+            ->get(['id', 'name']);
 
-        return $this->successResponse($clinics, 'Clínicas públicas listadas.');
+        return $this->successResponse($clinics, 'Active clinics listed.');
     }
 }
