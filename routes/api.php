@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\AdminClinicController;
 use App\Http\Controllers\AdminUserController;
 use App\Http\Controllers\AppointmentController;
 use App\Http\Controllers\AuthController;
@@ -24,9 +25,17 @@ Route::get('/public/clinics', [PublicClinicController::class, 'index']);
 Route::middleware(['auth:sanctum', 'role:super_admin'])->prefix('super')->group(function (): void {
     Route::post('/clinics', [SuperClinicController::class, 'store']);
     Route::get('/clinics', [SuperClinicController::class, 'index']);
+    Route::get('/clinics/{clinic}', [SuperClinicController::class, 'show']);
+    Route::put('/clinics/{clinic}', [SuperClinicController::class, 'update']);
+    Route::patch('/clinics/{clinic}', [SuperClinicController::class, 'update']);
+    Route::delete('/clinics/{clinic}', [SuperClinicController::class, 'destroy']);
 });
 
 Route::middleware(['auth:sanctum', 'role:admin'])->prefix('admin')->group(function (): void {
+    Route::get('/clinic', [AdminClinicController::class, 'show']);
+    Route::put('/clinic', [AdminClinicController::class, 'update']);
+    Route::patch('/clinic', [AdminClinicController::class, 'update']);
+
     Route::post('/users', [AdminUserController::class, 'store']);
     Route::get('/users', [AdminUserController::class, 'index']);
 });
