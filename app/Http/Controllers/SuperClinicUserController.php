@@ -4,33 +4,30 @@ namespace App\Http\Controllers;
 
 use App\Http\Controllers\Concerns\ApiResponse;
 use App\Http\Requests\Admin\StoreAdminUserRequest;
+use App\Models\Clinic;
 use App\Models\User;
 use App\Services\UserCreationService;
 use Illuminate\Http\JsonResponse;
 
-class AdminUserController extends Controller
+class SuperClinicUserController extends Controller
 {
     use ApiResponse;
 
-    public function index(): JsonResponse
+    public function index(Clinic $clinic): JsonResponse
     {
-        $user = request()->user();
-
         $users = User::query()
-            ->where('clinic_id', $user->clinic_id)
-            ->where('id', '!=', $user->id)
+            ->where('clinic_id', $clinic->id)
+            ->whereIn('role', ['admin', 'receptionist', 'dentist'])
+            ->with('dentistProfile')
             ->latest()
             ->get();
 
         return $this->successResponse($users, 'Usuarios de clínica listados.');
     }
 
-    public function store(StoreAdminUserRequest $request, UserCreationService $userCreationService): JsonResponse
+    public function store(Clinic $clinic, StoreAdminUserRequest $request, UserCreationService $userCreationService): JsonResponse
     {
-        $authUser = request()->user();
-        $data = $request->validated();
-
-        $newUser = $userCreationService->createClinicStaff((int) $authUser->clinic_id, $data);
+        $newUser = $userCreationService->createClinicStaff($clinic->id, $request->validated());
 
         return $this->successResponse($newUser, 'Usuario creado en clínica.', 201);
     }
