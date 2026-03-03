@@ -57,3 +57,57 @@ If you discover a security vulnerability within Laravel, please send an e-mail t
 ## License
 
 The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+
+## Super Admin: crear staff por clínica (Postman)
+
+### Endpoint
+`POST /api/super/clinics/{clinic}/users`
+
+Requiere:
+- `Authorization: Bearer <token_super_admin>`
+- Middleware: `auth:sanctum` + `role:super_admin`
+
+Body JSON:
+
+```json
+{
+  "name": "Dra. Mariana López",
+  "email": "mariana.lopez@clinic.test",
+  "password": "password123",
+  "role": "dentist",
+  "phone": "+52 55 1234 5678",
+  "status": true
+}
+```
+
+Notas:
+- `role` solo permite `dentist` o `receptionist`.
+- `clinic_id` se toma de la ruta `{clinic}` y cualquier `clinic_id` enviado en body se ignora.
+- Si `role=dentist`, se crea automáticamente su `dentist_profile` con el mismo `clinic_id`.
+
+Respuesta exitosa (`201`):
+
+```json
+{
+  "success": true,
+  "message": "Usuario creado en clínica.",
+  "data": {
+    "id": 10,
+    "clinic_id": 2,
+    "name": "Dra. Mariana López",
+    "email": "mariana.lopez@clinic.test",
+    "role": "dentist",
+    "status": true,
+    "dentist_profile": {
+      "id": 4,
+      "user_id": 10,
+      "clinic_id": 2
+    }
+  }
+}
+```
+
+### Listado de staff por clínica
+`GET /api/super/clinics/{clinic}/users`
+
+Retorna usuarios de la clínica para roles: `admin`, `dentist`, `receptionist`.
