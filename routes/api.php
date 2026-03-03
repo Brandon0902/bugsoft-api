@@ -9,6 +9,7 @@ use App\Http\Controllers\DentistAppointmentController;
 use App\Http\Controllers\PatientController;
 use App\Http\Controllers\PublicClinicController;
 use App\Http\Controllers\SuperClinicController;
+use App\Http\Controllers\SuperClinicUserController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('auth')->group(function (): void {
@@ -29,6 +30,9 @@ Route::middleware(['auth:sanctum', 'role:super_admin'])->prefix('super')->group(
     Route::put('/clinics/{clinic}', [SuperClinicController::class, 'update']);
     Route::patch('/clinics/{clinic}', [SuperClinicController::class, 'update']);
     Route::delete('/clinics/{clinic}', [SuperClinicController::class, 'destroy']);
+
+    Route::post('/clinics/{clinic}/users', [SuperClinicUserController::class, 'store']);
+    Route::get('/clinics/{clinic}/users', [SuperClinicUserController::class, 'index']);
 });
 
 Route::middleware(['auth:sanctum', 'role:admin'])->prefix('admin')->group(function (): void {
