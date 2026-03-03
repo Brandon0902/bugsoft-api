@@ -20,7 +20,7 @@ class PatientController extends Controller
 
         $patients = User::query()
             ->where('clinic_id', $authUser->clinic_id)
-            ->where('role', 'client')
+            ->where('role', 'pacient')
             ->with('patientProfile')
             ->latest()
             ->get();
@@ -40,7 +40,7 @@ class PatientController extends Controller
                 'email' => $data['email'],
                 'password' => $data['password'] ?? 'ChangeMe123!',
                 'phone' => $data['phone'] ?? null,
-                'role' => 'client',
+                'role' => 'pacient',
                 'status' => $data['status'] ?? true,
             ]);
 
@@ -104,7 +104,7 @@ class PatientController extends Controller
         return User::query()
             ->where('id', $id)
             ->where('clinic_id', $authUser->clinic_id)
-            ->where('role', 'client')
+            ->where('role', 'pacient')
             ->with('patientProfile')
             ->firstOrFail();
     }
