@@ -6,7 +6,7 @@ use App\Http\Controllers\Concerns\ApiResponse;
 use App\Models\Appointment;
 use Illuminate\Http\JsonResponse;
 
-class ClientAppointmentController extends Controller
+class PacientAppointmentController extends Controller
 {
     use ApiResponse;
 
@@ -21,6 +21,6 @@ class ClientAppointmentController extends Controller
             ->orderBy('start_at')
             ->get();
 
-        return $this->successResponse($appointments, 'Citas del cliente listadas.');
+        return $this->successResponse($appointments, 'Citas del paciente listadas.');
     }
 }

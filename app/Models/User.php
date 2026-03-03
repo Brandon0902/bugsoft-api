@@ -13,7 +13,7 @@ class User extends Authenticatable
 {
     use HasApiTokens, HasFactory, Notifiable;
 
-    public const ROLES = ['super_admin', 'admin', 'receptionist', 'dentist', 'client'];
+    public const ROLES = ['super_admin', 'admin', 'receptionist', 'dentist', 'pacient'];
 
     protected $fillable = [
         'clinic_id',

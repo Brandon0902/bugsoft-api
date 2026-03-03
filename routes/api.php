@@ -4,7 +4,7 @@ use App\Http\Controllers\AdminClinicController;
 use App\Http\Controllers\AdminUserController;
 use App\Http\Controllers\AppointmentController;
 use App\Http\Controllers\AuthController;
-use App\Http\Controllers\ClientAppointmentController;
+use App\Http\Controllers\PacientAppointmentController;
 use App\Http\Controllers\DentistAppointmentController;
 use App\Http\Controllers\PatientController;
 use App\Http\Controllers\PublicClinicController;
@@ -53,4 +53,4 @@ Route::middleware(['auth:sanctum', 'role:admin,receptionist'])->group(function (
 });
 
 Route::middleware(['auth:sanctum', 'role:dentist'])->get('/dentist/appointments', [DentistAppointmentController::class, 'index']);
-Route::middleware(['auth:sanctum', 'role:client'])->get('/client/appointments', [ClientAppointmentController::class, 'index']);
+Route::middleware(['auth:sanctum', 'role:pacient'])->get('/pacient/appointments', [PacientAppointmentController::class, 'index']);

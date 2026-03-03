@@ -46,7 +46,7 @@ class AppointmentController extends Controller
         $patient = User::query()
             ->where('id', $data['patient_user_id'])
             ->where('clinic_id', $authUser->clinic_id)
-            ->where('role', 'client')
+            ->where('role', 'pacient')
             ->first();
 
         $dentist = User::query()
