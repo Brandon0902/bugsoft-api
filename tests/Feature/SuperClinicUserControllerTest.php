@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\Clinic;
+use App\Models\DentistProfile;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Sanctum\Sanctum;
@@ -131,5 +132,98 @@ class SuperClinicUserControllerTest extends TestCase
             ->assertForbidden()
             ->assertJsonPath('success', false)
             ->assertJsonPath('message', 'Forbidden');
+    }
+
+    public function test_super_admin_can_show_update_and_destroy_staff_from_same_clinic(): void
+    {
+        $superAdmin = User::factory()->create(['role' => 'super_admin']);
+        $clinic = Clinic::query()->create(['name' => 'Clinic Show']);
+        $staff = User::factory()->create([
+            'clinic_id' => $clinic->id,
+            'role' => 'receptionist',
+            'status' => true,
+        ]);
+
+        Sanctum::actingAs($superAdmin);
+
+        $this->getJson("/api/super/clinics/{$clinic->id}/users/{$staff->id}")
+            ->assertOk()
+            ->assertJsonPath('data.id', $staff->id)
+            ->assertJsonPath('data.dentist_profile', null);
+
+        $this->patchJson("/api/super/clinics/{$clinic->id}/users/{$staff->id}", [
+            'name' => 'Updated Name',
+            'role' => 'dentist',
+            'status' => false,
+            'clinic_id' => 123,
+        ])
+            ->assertOk()
+            ->assertJsonPath('data.name', 'Updated Name')
+            ->assertJsonPath('data.role', 'dentist')
+            ->assertJsonPath('data.status', false)
+            ->assertJsonPath('data.clinic_id', $clinic->id)
+            ->assertJsonPath('data.dentist_profile.user_id', $staff->id);
+
+        $this->assertDatabaseHas('dentist_profiles', [
+            'user_id' => $staff->id,
+            'clinic_id' => $clinic->id,
+        ]);
+
+        $this->deleteJson("/api/super/clinics/{$clinic->id}/users/{$staff->id}")
+            ->assertOk()
+            ->assertJsonPath('success', true);
+
+        $this->assertDatabaseMissing('users', ['id' => $staff->id]);
+    }
+
+    public function test_super_admin_blocked_when_staff_belongs_to_another_clinic(): void
+    {
+        $superAdmin = User::factory()->create(['role' => 'super_admin']);
+        $clinic = Clinic::query()->create(['name' => 'Clinic A']);
+        $otherClinic = Clinic::query()->create(['name' => 'Clinic B']);
+        $staff = User::factory()->create([
+            'clinic_id' => $otherClinic->id,
+            'role' => 'dentist',
+        ]);
+
+        Sanctum::actingAs($superAdmin);
+
+        $this->getJson("/api/super/clinics/{$clinic->id}/users/{$staff->id}")->assertNotFound();
+        $this->patchJson("/api/super/clinics/{$clinic->id}/users/{$staff->id}", ['name' => 'nope'])->assertNotFound();
+        $this->deleteJson("/api/super/clinics/{$clinic->id}/users/{$staff->id}")->assertNotFound();
+    }
+
+    public function test_super_admin_cannot_operate_non_staff_roles(): void
+    {
+        $superAdmin = User::factory()->create(['role' => 'super_admin']);
+        $clinic = Clinic::query()->create(['name' => 'Clinic Role']);
+        $admin = User::factory()->create(['clinic_id' => $clinic->id, 'role' => 'admin']);
+
+        Sanctum::actingAs($superAdmin);
+
+        $this->getJson("/api/super/clinics/{$clinic->id}/users/{$admin->id}")->assertNotFound();
+        $this->patchJson("/api/super/clinics/{$clinic->id}/users/{$admin->id}", ['name' => 'x'])->assertNotFound();
+        $this->deleteJson("/api/super/clinics/{$clinic->id}/users/{$admin->id}")->assertNotFound();
+    }
+
+    public function test_super_admin_role_change_from_dentist_to_receptionist_removes_dentist_profile(): void
+    {
+        $superAdmin = User::factory()->create(['role' => 'super_admin']);
+        $clinic = Clinic::query()->create(['name' => 'Clinic Role Change']);
+        $dentist = User::factory()->create(['clinic_id' => $clinic->id, 'role' => 'dentist']);
+        DentistProfile::query()->create(['user_id' => $dentist->id, 'clinic_id' => $clinic->id]);
+
+        Sanctum::actingAs($superAdmin);
+
+        $this->patchJson("/api/super/clinics/{$clinic->id}/users/{$dentist->id}", [
+            'role' => 'receptionist',
+        ])
+            ->assertOk()
+            ->assertJsonPath('data.role', 'receptionist')
+            ->assertJsonPath('data.dentist_profile', null);
+
+        $this->assertDatabaseMissing('dentist_profiles', [
+            'user_id' => $dentist->id,
+        ]);
     }
 }

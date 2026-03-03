@@ -33,6 +33,9 @@ Route::middleware(['auth:sanctum', 'role:super_admin'])->prefix('super')->group(
 
     Route::post('/clinics/{clinic}/users', [SuperClinicUserController::class, 'store']);
     Route::get('/clinics/{clinic}/users', [SuperClinicUserController::class, 'index']);
+    Route::get('/clinics/{clinic}/users/{user}', [SuperClinicUserController::class, 'show']);
+    Route::patch('/clinics/{clinic}/users/{user}', [SuperClinicUserController::class, 'update']);
+    Route::delete('/clinics/{clinic}/users/{user}', [SuperClinicUserController::class, 'destroy']);
 });
 
 Route::middleware(['auth:sanctum', 'role:admin'])->prefix('admin')->group(function (): void {
@@ -42,6 +45,9 @@ Route::middleware(['auth:sanctum', 'role:admin'])->prefix('admin')->group(functi
 
     Route::post('/users', [AdminUserController::class, 'store']);
     Route::get('/users', [AdminUserController::class, 'index']);
+    Route::get('/users/{user}', [AdminUserController::class, 'show']);
+    Route::patch('/users/{user}', [AdminUserController::class, 'update']);
+    Route::delete('/users/{user}', [AdminUserController::class, 'destroy']);
 });
 
 Route::middleware(['auth:sanctum', 'role:admin,receptionist'])->group(function (): void {
