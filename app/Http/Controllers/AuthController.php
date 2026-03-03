@@ -14,17 +14,29 @@ class AuthController extends Controller
 
     public function login(LoginRequest $request): JsonResponse
     {
-        $user = User::query()->where('email', $request->string('email'))->first();
+        $email = (string) $request->input('email');
+        $password = (string) $request->input('password');
 
-        if (! $user || ! Hash::check($request->string('password'), $user->password)) {
-            return $this->errorResponse('Credenciales inválidas.', ['auth' => ['Email o contraseña incorrectos.']], 401);
+        $user = User::query()->where('email', $email)->first();
+
+        if (! $user || ! Hash::check($password, $user->password)) {
+            return $this->errorResponse(
+                'Credenciales inválidas.',
+                ['auth' => ['Email o contraseña incorrectos.']],
+                401
+            );
         }
 
         if (! $user->status) {
-            return $this->errorResponse('Usuario inactivo.', ['auth' => ['Tu cuenta está deshabilitada.']], 403);
+            return $this->errorResponse(
+                'Usuario inactivo.',
+                ['auth' => ['Tu cuenta está deshabilitada.']],
+                403
+            );
         }
 
-        $token = $user->createApiToken('auth-token');
+        // ✅ Sanctum estándar (NO usa user_id, usa tokenable_type/tokenable_id)
+        $token = $user->createToken('auth-token')->plainTextToken;
 
         return $this->successResponse([
             'token' => $token,
@@ -38,7 +50,7 @@ class AuthController extends Controller
         $user = request()->user();
         $token = request()->bearerToken();
 
-        if ($token) {
+        if ($user && $token) {
             $user->tokens()->where('token', hash('sha256', $token))->delete();
         }
 
