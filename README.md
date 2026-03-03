@@ -111,3 +111,73 @@ Respuesta exitosa (`201`):
 `GET /api/super/clinics/{clinic}/users`
 
 Retorna usuarios de la clínica para roles: `admin`, `dentist`, `receptionist`.
+
+## Staff CRUD adicional (Super/Admin)
+
+### Política de cambio de rol y `DentistProfile`
+- `receptionist -> dentist`: se crea `dentist_profile` automáticamente si no existe.
+- `dentist -> receptionist`: se elimina `dentist_profile` para mantener consistencia de staff no dentista.
+- `clinic_id` no es editable en update; se ignora si llega en payload.
+
+### Super Admin: ver/editar/eliminar staff por clínica (Postman)
+
+Requiere:
+- `Authorization: Bearer <token_super_admin>`
+- Middleware: `auth:sanctum` + `role:super_admin`
+
+#### Show
+`GET /api/super/clinics/{clinic}/users/{user}`
+
+#### Update
+`PATCH /api/super/clinics/{clinic}/users/{user}`
+
+Body JSON (campos opcionales):
+
+```json
+{
+  "name": "Dra. Laura Pérez",
+  "email": "laura.perez@clinic.test",
+  "phone": "+52 55 9999 0000",
+  "status": true,
+  "role": "dentist",
+  "password": "newpassword123"
+}
+```
+
+#### Destroy
+`DELETE /api/super/clinics/{clinic}/users/{user}`
+
+---
+
+### Admin: ver/editar/eliminar staff de su clínica (Postman)
+
+Requiere:
+- `Authorization: Bearer <token_admin>`
+- Middleware: `auth:sanctum` + `role:admin`
+
+#### Show
+`GET /api/admin/users/{user}`
+
+#### Update
+`PATCH /api/admin/users/{user}`
+
+Body JSON (campos opcionales):
+
+```json
+{
+  "name": "Recepción Turno Tarde",
+  "email": "recepcion.tarde@clinic.test",
+  "phone": "+52 55 4444 3333",
+  "status": false,
+  "role": "receptionist",
+  "password": null
+}
+```
+
+#### Destroy
+`DELETE /api/admin/users/{user}`
+
+Notas de seguridad:
+- Solo se permite operar sobre `role in (dentist, receptionist)`.
+- Si el `user` no pertenece a la clínica esperada, la API responde `404 Resource not found`.
+- `show/index/store` incluyen `dentist_profile` cuando aplica.

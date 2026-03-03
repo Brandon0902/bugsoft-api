@@ -4,10 +4,13 @@ namespace App\Http\Controllers;
 
 use App\Http\Controllers\Concerns\ApiResponse;
 use App\Http\Requests\Admin\StoreAdminUserRequest;
+use App\Http\Requests\Admin\UpdateAdminUserRequest;
 use App\Models\Clinic;
+use App\Models\DentistProfile;
 use App\Models\User;
 use App\Services\UserCreationService;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\DB;
 
 class SuperClinicUserController extends Controller
 {
@@ -30,5 +33,58 @@ class SuperClinicUserController extends Controller
         $newUser = $userCreationService->createClinicStaff($clinic->id, $request->validated());
 
         return $this->successResponse($newUser, 'Usuario creado en clínica.', 201);
+    }
+
+    public function show(Clinic $clinic, User $user): JsonResponse
+    {
+        $user = $this->findClinicStaff($clinic->id, $user);
+
+        return $this->successResponse($user->load('dentistProfile'), 'Usuario encontrado.');
+    }
+
+    public function update(Clinic $clinic, User $user, UpdateAdminUserRequest $request): JsonResponse
+    {
+        $user = $this->findClinicStaff($clinic->id, $user);
+        $data = $request->validated();
+        unset($data['clinic_id']);
+
+        DB::transaction(function () use ($clinic, $user, $data): void {
+            $oldRole = $user->role;
+            $user->fill($data);
+            $user->save();
+
+            if ($oldRole !== $user->role) {
+                if ($user->role === 'dentist') {
+                    DentistProfile::query()->firstOrCreate([
+                        'user_id' => $user->id,
+                    ], [
+                        'clinic_id' => $clinic->id,
+                    ]);
+                }
+
+                if ($oldRole === 'dentist' && $user->role === 'receptionist') {
+                    $user->dentistProfile()?->delete();
+                }
+            }
+        });
+
+        return $this->successResponse($user->fresh()->load('dentistProfile'), 'Usuario actualizado.');
+    }
+
+    public function destroy(Clinic $clinic, User $user): JsonResponse
+    {
+        $user = $this->findClinicStaff($clinic->id, $user);
+        $user->delete();
+
+        return $this->successResponse([], 'Usuario eliminado.');
+    }
+
+    private function findClinicStaff(int $clinicId, User $user): User
+    {
+        return User::query()
+            ->where('id', $user->id)
+            ->where('clinic_id', $clinicId)
+            ->whereIn('role', ['dentist', 'receptionist'])
+            ->firstOrFail();
     }
 }
