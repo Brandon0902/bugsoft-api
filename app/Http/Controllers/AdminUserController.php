@@ -52,8 +52,10 @@ class AdminUserController extends Controller
         $user = $this->findClinicStaff($user);
         $data = $request->validated();
         unset($data['clinic_id']);
+        $dentistProfileData = $data['dentist_profile'] ?? null;
+        unset($data['dentist_profile']);
 
-        DB::transaction(function () use ($user, $data): void {
+        DB::transaction(function () use ($user, $data, $dentistProfileData): void {
             $oldRole = $user->role;
             $user->fill($data);
             $user->save();
@@ -71,6 +73,20 @@ class AdminUserController extends Controller
                     $user->dentistProfile()?->delete();
                 }
             }
+
+            if ($user->role === 'dentist' && is_array($dentistProfileData)) {
+                $profileData = array_filter([
+                    'clinic_id' => $user->clinic_id,
+                    'specialty' => $dentistProfileData['specialty'] ?? null,
+                    'license_number' => $dentistProfileData['license_number'] ?? null,
+                    'color' => $dentistProfileData['color'] ?? null,
+                ], static fn (mixed $value): bool => $value !== null);
+
+                DentistProfile::query()->updateOrCreate(
+                    ['user_id' => $user->id],
+                    $profileData,
+                );
+            }
         });
 
         return $this->successResponse($user->fresh()->load('dentistProfile'), 'Usuario actualizado.');
@@ -79,6 +95,7 @@ class AdminUserController extends Controller
     public function destroy(User $user): JsonResponse
     {
         $user = $this->findClinicStaff($user);
+        $user->dentistProfile()?->delete();
         $user->delete();
 
         return $this->successResponse([], 'Usuario eliminado.');

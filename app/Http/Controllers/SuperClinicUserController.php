@@ -47,8 +47,10 @@ class SuperClinicUserController extends Controller
         $user = $this->findClinicStaff($clinic->id, $user);
         $data = $request->validated();
         unset($data['clinic_id']);
+        $dentistProfileData = $data['dentist_profile'] ?? null;
+        unset($data['dentist_profile']);
 
-        DB::transaction(function () use ($clinic, $user, $data): void {
+        DB::transaction(function () use ($clinic, $user, $data, $dentistProfileData): void {
             $oldRole = $user->role;
             $user->fill($data);
             $user->save();
@@ -66,6 +68,20 @@ class SuperClinicUserController extends Controller
                     $user->dentistProfile()?->delete();
                 }
             }
+
+            if ($user->role === 'dentist' && is_array($dentistProfileData)) {
+                $profileData = array_filter([
+                    'clinic_id' => $clinic->id,
+                    'specialty' => $dentistProfileData['specialty'] ?? null,
+                    'license_number' => $dentistProfileData['license_number'] ?? null,
+                    'color' => $dentistProfileData['color'] ?? null,
+                ], static fn (mixed $value): bool => $value !== null);
+
+                DentistProfile::query()->updateOrCreate(
+                    ['user_id' => $user->id],
+                    $profileData,
+                );
+            }
         });
 
         return $this->successResponse($user->fresh()->load('dentistProfile'), 'Usuario actualizado.');
@@ -74,6 +90,7 @@ class SuperClinicUserController extends Controller
     public function destroy(Clinic $clinic, User $user): JsonResponse
     {
         $user = $this->findClinicStaff($clinic->id, $user);
+        $user->dentistProfile()?->delete();
         $user->delete();
 
         return $this->successResponse([], 'Usuario eliminado.');
