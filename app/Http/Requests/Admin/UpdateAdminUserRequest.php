@@ -25,6 +25,10 @@ class UpdateAdminUserRequest extends FormRequest
             'phone' => ['sometimes', 'nullable', 'string', 'max:30'],
             'role' => ['sometimes', Rule::in(['receptionist', 'dentist'])],
             'status' => ['sometimes', 'boolean'],
+            'dentist_profile' => ['nullable', 'array'],
+            'dentist_profile.specialty' => ['nullable', 'string', 'max:255'],
+            'dentist_profile.license_number' => ['nullable', 'string', 'max:255'],
+            'dentist_profile.color' => ['nullable', 'string', 'max:20'],
         ];
     }
 }
