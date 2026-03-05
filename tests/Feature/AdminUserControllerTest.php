@@ -13,6 +13,36 @@ class AdminUserControllerTest extends TestCase
 {
     use RefreshDatabase;
 
+
+    public function test_admin_index_lists_only_staff_from_own_clinic_with_dentist_profile_loaded(): void
+    {
+        $clinic = Clinic::query()->create(['name' => 'Clinic Index']);
+        $otherClinic = Clinic::query()->create(['name' => 'Clinic Other']);
+        $admin = User::factory()->create(['clinic_id' => $clinic->id, 'role' => 'admin']);
+
+        $dentist = User::factory()->create(['clinic_id' => $clinic->id, 'role' => 'dentist']);
+        DentistProfile::query()->create(['user_id' => $dentist->id, 'clinic_id' => $clinic->id]);
+
+        $receptionist = User::factory()->create(['clinic_id' => $clinic->id, 'role' => 'receptionist']);
+        User::factory()->create(['clinic_id' => $clinic->id, 'role' => 'client']);
+        User::factory()->create(['clinic_id' => $clinic->id, 'role' => 'admin']);
+        User::factory()->create(['clinic_id' => $otherClinic->id, 'role' => 'dentist']);
+
+        Sanctum::actingAs($admin);
+
+        $response = $this->getJson('/api/admin/users')
+            ->assertOk()
+            ->assertJsonCount(2, 'data')
+            ->assertJsonFragment(['id' => $dentist->id])
+            ->assertJsonFragment(['id' => $receptionist->id]);
+
+        $roles = collect($response->json('data'))->pluck('role')->sort()->values()->all();
+        $this->assertSame(['dentist', 'receptionist'], $roles);
+
+        $dentistItem = collect($response->json('data'))->firstWhere('id', $dentist->id);
+        $this->assertNotNull($dentistItem['dentist_profile']);
+    }
+
     public function test_admin_can_show_update_and_destroy_staff_in_own_clinic(): void
     {
         $clinic = Clinic::query()->create(['name' => 'Clinic Admin']);

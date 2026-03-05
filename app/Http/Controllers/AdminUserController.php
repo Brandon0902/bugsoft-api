@@ -21,6 +21,7 @@ class AdminUserController extends Controller
 
         $users = User::query()
             ->where('clinic_id', $user->clinic_id)
+            ->whereIn('role', ['dentist', 'receptionist'])
             ->where('id', '!=', $user->id)
             ->with('dentistProfile')
             ->latest()
