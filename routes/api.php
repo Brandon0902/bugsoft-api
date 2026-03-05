@@ -46,6 +46,7 @@ Route::middleware(['auth:sanctum', 'role:admin'])->prefix('admin')->group(functi
     Route::post('/users', [AdminUserController::class, 'store']);
     Route::get('/users', [AdminUserController::class, 'index']);
     Route::get('/users/{user}', [AdminUserController::class, 'show']);
+    Route::put('/users/{user}', [AdminUserController::class, 'update']);
     Route::patch('/users/{user}', [AdminUserController::class, 'update']);
     Route::delete('/users/{user}', [AdminUserController::class, 'destroy']);
 });
