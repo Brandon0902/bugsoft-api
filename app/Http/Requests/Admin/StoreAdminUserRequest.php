@@ -21,6 +21,12 @@ class StoreAdminUserRequest extends FormRequest
             'phone' => ['nullable', 'string', 'max:30'],
             'role' => ['required', Rule::in(['receptionist', 'dentist'])],
             'status' => ['nullable', 'boolean'],
+
+            // ---- Dentist profile (solo cuando role = dentist) ----
+            'dentist_profile' => ['nullable', 'array'],
+            'dentist_profile.specialty' => ['required_if:role,dentist', 'nullable', 'string', 'max:255'],
+            'dentist_profile.license_number' => ['required_if:role,dentist', 'nullable', 'string', 'max:255'],
+            'dentist_profile.color' => ['required_if:role,dentist', 'nullable', 'string', 'max:20'],
         ];
     }
 }
