@@ -5,37 +5,34 @@ namespace App\Http\Controllers;
 use App\Http\Controllers\Concerns\ApiResponse;
 use App\Http\Requests\Patient\StorePatientRequest;
 use App\Http\Requests\Patient\UpdatePatientRequest;
-use App\Models\PatientProfile;
+use App\Models\Clinic;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
 
-class PatientController extends Controller
+class SuperClinicPatientController extends Controller
 {
     use ApiResponse;
 
-    public function index(): JsonResponse
+    public function index(Clinic $clinic): JsonResponse
     {
-        $authUser = request()->user();
-
         $patients = User::query()
-            ->where('clinic_id', $authUser->clinic_id)
+            ->where('clinic_id', $clinic->id)
             ->where('role', 'pacient')
             ->with('patientProfile')
             ->latest()
             ->get();
 
-        return $this->successResponse($patients, 'Pacientes listados.');
+        return $this->successResponse($patients, 'Pacientes de clínica listados.');
     }
 
-    public function store(StorePatientRequest $request): JsonResponse
+    public function store(Clinic $clinic, StorePatientRequest $request): JsonResponse
     {
-        $authUser = request()->user();
         $data = $request->validated();
 
-        $patient = DB::transaction(function () use ($authUser, $data) {
+        $patient = DB::transaction(function () use ($clinic, $data): User {
             $user = User::query()->create([
-                'clinic_id' => $authUser->clinic_id,
+                'clinic_id' => $clinic->id,
                 'name' => $data['name'],
                 'email' => $data['email'] ?? null,
                 'password' => $data['password'] ?? 'ChangeMe123!',
@@ -44,9 +41,8 @@ class PatientController extends Controller
                 'status' => $data['status'] ?? true,
             ]);
 
-            PatientProfile::query()->create([
-                'user_id' => $user->id,
-                'clinic_id' => $authUser->clinic_id,
+            $user->patientProfile()->create([
+                'clinic_id' => $clinic->id,
                 'birth_date' => data_get($data, 'profile.birth_date'),
                 'gender' => data_get($data, 'profile.gender'),
                 'address' => data_get($data, 'profile.address'),
@@ -57,22 +53,22 @@ class PatientController extends Controller
             return $user->load('patientProfile');
         });
 
-        return $this->successResponse($patient, 'Paciente creado.', 201);
+        return $this->successResponse($patient, 'Paciente creado en clínica.', 201);
     }
 
-    public function show(int $id): JsonResponse
+    public function show(Clinic $clinic, int $id): JsonResponse
     {
-        $patient = $this->findClinicPatient($id);
+        $patient = $this->findClinicPatient($clinic->id, $id);
 
         return $this->successResponse($patient, 'Paciente obtenido.');
     }
 
-    public function update(UpdatePatientRequest $request, int $id): JsonResponse
+    public function update(Clinic $clinic, UpdatePatientRequest $request, int $id): JsonResponse
     {
-        $patient = $this->findClinicPatient($id);
+        $patient = $this->findClinicPatient($clinic->id, $id);
         $data = $request->validated();
 
-        DB::transaction(function () use ($patient, $data) {
+        DB::transaction(function () use ($clinic, $patient, $data): void {
             $patient->fill(collect($data)->only(['name', 'email', 'phone', 'status'])->toArray());
             if (array_key_exists('password', $data) && ! empty($data['password'])) {
                 $patient->password = $data['password'];
@@ -83,7 +79,7 @@ class PatientController extends Controller
                 $patient->patientProfile()->updateOrCreate(
                     ['user_id' => $patient->id],
                     [
-                        'clinic_id' => $patient->clinic_id,
+                        'clinic_id' => $clinic->id,
                         'birth_date' => data_get($data, 'profile.birth_date'),
                         'gender' => data_get($data, 'profile.gender'),
                         'address' => data_get($data, 'profile.address'),
@@ -97,9 +93,9 @@ class PatientController extends Controller
         return $this->successResponse($patient->fresh()->load('patientProfile'), 'Paciente actualizado.');
     }
 
-    public function destroy(int $id): JsonResponse
+    public function destroy(Clinic $clinic, int $id): JsonResponse
     {
-        $patient = $this->findClinicPatient($id);
+        $patient = $this->findClinicPatient($clinic->id, $id);
 
         DB::transaction(function () use ($patient): void {
             $patient->patientProfile()?->delete();
@@ -109,13 +105,11 @@ class PatientController extends Controller
         return $this->successResponse([], 'Paciente eliminado.');
     }
 
-    protected function findClinicPatient(int $id): User
+    private function findClinicPatient(int $clinicId, int $id): User
     {
-        $authUser = request()->user();
-
         return User::query()
             ->where('id', $id)
-            ->where('clinic_id', $authUser->clinic_id)
+            ->where('clinic_id', $clinicId)
             ->where('role', 'pacient')
             ->with('patientProfile')
             ->firstOrFail();
