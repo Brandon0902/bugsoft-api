@@ -3,11 +3,12 @@
 namespace App\Http\Controllers;
 
 use App\Http\Controllers\Concerns\ApiResponse;
-use App\Http\Requests\Admin\StoreAdminUserRequest;
-use App\Http\Requests\Admin\UpdateAdminUserRequest;
+use App\Http\Requests\Receptionist\StoreReceptionistRequest;
+use App\Http\Requests\Receptionist\UpdateReceptionistRequest;
 use App\Models\User;
 use App\Services\UserCreationService;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\Hash;
 
 class AdminReceptionistController extends Controller
 {
@@ -26,7 +27,7 @@ class AdminReceptionistController extends Controller
         return $this->successResponse($users, 'Recepcionistas de clínica listados.');
     }
 
-    public function store(StoreAdminUserRequest $request, UserCreationService $userCreationService): JsonResponse
+    public function store(StoreReceptionistRequest $request, UserCreationService $userCreationService): JsonResponse
     {
         $authUser = request()->user();
         $data = $request->validated();
@@ -44,16 +45,19 @@ class AdminReceptionistController extends Controller
         return $this->successResponse($user, 'Recepcionista encontrado.');
     }
 
-    public function update(UpdateAdminUserRequest $request, int $id): JsonResponse
+    public function update(UpdateReceptionistRequest $request, int $id): JsonResponse
     {
         $user = $this->findClinicReceptionist($id);
         $data = $request->validated();
 
-        unset($data['clinic_id']);
         $data['role'] = 'receptionist';
-        unset($data['dentist_profile']);
 
-        $user->fill(collect($data)->only(['name', 'email', 'password', 'phone', 'status', 'role'])->toArray());
+        $user->fill(collect($data)->only(['name', 'email', 'phone', 'status', 'role'])->toArray());
+
+        if (array_key_exists('password', $data) && filled($data['password'])) {
+            $user->password = Hash::make($data['password']);
+        }
+
         $user->save();
 
         return $this->successResponse($user->fresh(), 'Recepcionista actualizado.');
