@@ -4,7 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Http\Controllers\Concerns\ApiResponse;
 use App\Http\Requests\Admin\StoreAdminUserRequest;
-use App\Http\Requests\Admin\UpdateAdminUserRequest;
+use App\Http\Requests\Super\UpdateSuperClinicUserRequest;
 use App\Models\Clinic;
 use App\Models\DentistProfile;
 use App\Models\User;
@@ -37,14 +37,14 @@ class SuperClinicUserController extends Controller
 
     public function show(Clinic $clinic, User $user): JsonResponse
     {
-        $user = $this->findClinicStaff($clinic->id, $user);
+        $user = $this->findClinicUser($clinic->id, $user);
 
         return $this->successResponse($user->load('dentistProfile'), 'Usuario encontrado.');
     }
 
-    public function update(Clinic $clinic, User $user, UpdateAdminUserRequest $request): JsonResponse
+    public function update(Clinic $clinic, User $user, UpdateSuperClinicUserRequest $request): JsonResponse
     {
-        $user = $this->findClinicStaff($clinic->id, $user);
+        $user = $this->findClinicUser($clinic->id, $user);
         $data = $request->validated();
         unset($data['clinic_id']);
         $dentistProfileData = $data['dentist_profile'] ?? null;
@@ -64,7 +64,7 @@ class SuperClinicUserController extends Controller
                     ]);
                 }
 
-                if ($oldRole === 'dentist' && $user->role === 'receptionist') {
+                if ($oldRole === 'dentist' && $user->role !== 'dentist') {
                     $user->dentistProfile()?->delete();
                 }
             }
@@ -89,19 +89,19 @@ class SuperClinicUserController extends Controller
 
     public function destroy(Clinic $clinic, User $user): JsonResponse
     {
-        $user = $this->findClinicStaff($clinic->id, $user);
+        $user = $this->findClinicUser($clinic->id, $user);
         $user->dentistProfile()?->delete();
         $user->delete();
 
         return $this->successResponse([], 'Usuario eliminado.');
     }
 
-    private function findClinicStaff(int $clinicId, User $user): User
+    private function findClinicUser(int $clinicId, User $user): User
     {
         return User::query()
             ->where('id', $user->id)
             ->where('clinic_id', $clinicId)
-            ->whereIn('role', ['dentist', 'receptionist'])
+            ->whereIn('role', ['admin', 'dentist', 'receptionist'])
             ->firstOrFail();
     }
 }
