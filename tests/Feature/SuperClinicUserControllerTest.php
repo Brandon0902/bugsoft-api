@@ -193,7 +193,7 @@ class SuperClinicUserControllerTest extends TestCase
         $this->deleteJson("/api/super/clinics/{$clinic->id}/users/{$staff->id}")->assertNotFound();
     }
 
-    public function test_super_admin_cannot_operate_non_staff_roles(): void
+    public function test_super_admin_can_edit_and_delete_admin_in_same_clinic(): void
     {
         $superAdmin = User::factory()->create(['role' => 'super_admin']);
         $clinic = Clinic::query()->create(['name' => 'Clinic Role']);
@@ -201,9 +201,63 @@ class SuperClinicUserControllerTest extends TestCase
 
         Sanctum::actingAs($superAdmin);
 
-        $this->getJson("/api/super/clinics/{$clinic->id}/users/{$admin->id}")->assertNotFound();
-        $this->patchJson("/api/super/clinics/{$clinic->id}/users/{$admin->id}", ['name' => 'x'])->assertNotFound();
+        $this->patchJson("/api/super/clinics/{$clinic->id}/users/{$admin->id}", [
+            'name' => 'Admin Updated',
+            'role' => 'admin',
+        ])
+            ->assertOk()
+            ->assertJsonPath('data.id', $admin->id)
+            ->assertJsonPath('data.name', 'Admin Updated')
+            ->assertJsonPath('data.role', 'admin');
+
+        $this->assertDatabaseHas('users', [
+            'id' => $admin->id,
+            'name' => 'Admin Updated',
+            'role' => 'admin',
+        ]);
+
+        $this->deleteJson("/api/super/clinics/{$clinic->id}/users/{$admin->id}")
+            ->assertOk()
+            ->assertJsonPath('success', true);
+
+        $this->assertDatabaseMissing('users', ['id' => $admin->id]);
+    }
+
+    public function test_super_admin_gets_404_when_editing_or_deleting_admin_from_another_clinic(): void
+    {
+        $superAdmin = User::factory()->create(['role' => 'super_admin']);
+        $clinic = Clinic::query()->create(['name' => 'Clinic Source']);
+        $otherClinic = Clinic::query()->create(['name' => 'Clinic Target']);
+        $admin = User::factory()->create(['clinic_id' => $otherClinic->id, 'role' => 'admin']);
+
+        Sanctum::actingAs($superAdmin);
+
+        $this->patchJson("/api/super/clinics/{$clinic->id}/users/{$admin->id}", [
+            'name' => 'Should Not Update',
+        ])->assertNotFound();
+
         $this->deleteJson("/api/super/clinics/{$clinic->id}/users/{$admin->id}")->assertNotFound();
+    }
+
+    public function test_admin_cannot_edit_or_delete_admin_users_through_super_endpoint(): void
+    {
+        $clinic = Clinic::query()->create(['name' => 'Clinic Forbidden']);
+        $admin = User::factory()->create(['clinic_id' => $clinic->id, 'role' => 'admin']);
+        $targetAdmin = User::factory()->create(['clinic_id' => $clinic->id, 'role' => 'admin']);
+
+        Sanctum::actingAs($admin);
+
+        $this->patchJson("/api/super/clinics/{$clinic->id}/users/{$targetAdmin->id}", [
+            'name' => 'No Access',
+        ])
+            ->assertForbidden()
+            ->assertJsonPath('success', false)
+            ->assertJsonPath('message', 'Forbidden');
+
+        $this->deleteJson("/api/super/clinics/{$clinic->id}/users/{$targetAdmin->id}")
+            ->assertForbidden()
+            ->assertJsonPath('success', false)
+            ->assertJsonPath('message', 'Forbidden');
     }
 
     public function test_super_admin_role_change_from_dentist_to_receptionist_removes_dentist_profile(): void
