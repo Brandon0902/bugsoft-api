@@ -89,7 +89,7 @@ class AppointmentAgendaPhaseOneTest extends TestCase
         $this->patchJson("/api/appointments/{$foreignAppointment->id}", ['reason' => 'No'])->assertNotFound();
     }
 
-    public function test_dentist_can_update_and_change_status_of_own_appointment_without_reassigning_dentist(): void
+    public function test_dentist_cannot_reassign_dentist_on_update_but_can_change_status_on_own_appointment(): void
     {
         [$clinic, $dentist, , $patient] = $this->makeClinicActorDentistPatient('dentist');
         $otherDentist = User::factory()->create(['clinic_id' => $clinic->id, 'role' => 'dentist']);
@@ -99,6 +99,13 @@ class AppointmentAgendaPhaseOneTest extends TestCase
 
         $this->patchJson("/api/appointments/{$appointment->id}", [
             'dentist_user_id' => $otherDentist->id,
+            'reason' => 'Actualizada por dentista',
+        ])
+            ->assertUnprocessable()
+            ->assertJsonPath('success', false)
+            ->assertJsonPath('errors.dentist_user_id.0', 'El campo dentist user id está prohibido.');
+
+        $this->patchJson("/api/appointments/{$appointment->id}", [
             'reason' => 'Actualizada por dentista',
         ])
             ->assertOk()
@@ -166,6 +173,27 @@ class AppointmentAgendaPhaseOneTest extends TestCase
 
         $this->getJson("/api/super/clinics/{$clinicA->id}/appointments/{$appointmentB->id}")
             ->assertNotFound();
+    }
+
+    public function test_super_admin_cannot_create_appointment_with_users_outside_url_clinic_scope(): void
+    {
+        $superAdmin = User::factory()->create(['role' => 'super_admin', 'clinic_id' => null]);
+        $clinicA = Clinic::query()->create(['name' => 'Clinic A']);
+        $clinicB = Clinic::query()->create(['name' => 'Clinic B']);
+        $dentistB = User::factory()->create(['clinic_id' => $clinicB->id, 'role' => 'dentist']);
+        $patientB = User::factory()->create(['clinic_id' => $clinicB->id, 'role' => 'pacient']);
+
+        Sanctum::actingAs($superAdmin);
+
+        $this->postJson("/api/super/clinics/{$clinicA->id}/appointments", [
+            'patient_user_id' => $patientB->id,
+            'dentist_user_id' => $dentistB->id,
+            'start_at' => '2026-04-20 09:00:00',
+            'end_at' => '2026-04-20 09:30:00',
+            'reason' => 'No debe crear',
+        ])
+            ->assertUnprocessable()
+            ->assertJsonPath('success', false);
     }
 
     public function test_pacient_cannot_access_general_appointment_endpoints(): void

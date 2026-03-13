@@ -17,7 +17,13 @@ class UpdateAppointmentRequest extends FormRequest
     {
         return [
             'patient_user_id' => ['sometimes', 'required', 'integer', 'exists:users,id'],
-            'dentist_user_id' => ['sometimes', 'required', 'integer', 'exists:users,id'],
+            'dentist_user_id' => [
+                Rule::prohibitedIf(fn (): bool => $this->user()?->role === 'dentist'),
+                'sometimes',
+                'required',
+                'integer',
+                'exists:users,id',
+            ],
             'start_at' => ['sometimes', 'required', 'date'],
             'end_at' => ['sometimes', 'required', 'date', 'after:start_at'],
             'reason' => ['sometimes', 'nullable', 'string', 'max:255'],
