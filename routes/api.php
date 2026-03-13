@@ -13,6 +13,7 @@ use App\Http\Controllers\SuperClinicController;
 use App\Http\Controllers\SuperClinicPatientController;
 use App\Http\Controllers\SuperClinicReceptionistController;
 use App\Http\Controllers\SuperClinicUserController;
+use App\Http\Controllers\SuperClinicAppointmentController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('auth')->group(function (): void {
@@ -51,6 +52,12 @@ Route::middleware(['auth:sanctum', 'role:super_admin'])->prefix('super')->group(
     Route::get('/clinics/{clinic}/receptionists/{id}', [SuperClinicReceptionistController::class, 'show']);
     Route::patch('/clinics/{clinic}/receptionists/{id}', [SuperClinicReceptionistController::class, 'update']);
     Route::delete('/clinics/{clinic}/receptionists/{id}', [SuperClinicReceptionistController::class, 'destroy']);
+
+    Route::get('/clinics/{clinic}/appointments', [SuperClinicAppointmentController::class, 'index']);
+    Route::post('/clinics/{clinic}/appointments', [SuperClinicAppointmentController::class, 'store']);
+    Route::get('/clinics/{clinic}/appointments/{appointment}', [SuperClinicAppointmentController::class, 'show']);
+    Route::patch('/clinics/{clinic}/appointments/{appointment}', [SuperClinicAppointmentController::class, 'update']);
+    Route::patch('/clinics/{clinic}/appointments/{appointment}/status', [SuperClinicAppointmentController::class, 'updateStatus']);
 });
 
 Route::middleware(['auth:sanctum', 'role:admin,receptionist'])->prefix('admin')->group(function (): void {
@@ -80,9 +87,11 @@ Route::middleware(['auth:sanctum', 'role:admin'])->prefix('admin')->group(functi
     Route::delete('/receptionists/{id}', [AdminReceptionistController::class, 'destroy']);
 });
 
-Route::middleware(['auth:sanctum', 'role:admin,receptionist'])->group(function (): void {
+Route::middleware(['auth:sanctum', 'role:admin,receptionist,dentist'])->group(function (): void {
     Route::post('/appointments', [AppointmentController::class, 'store']);
     Route::get('/appointments', [AppointmentController::class, 'index']);
+    Route::get('/appointments/{appointment}', [AppointmentController::class, 'show']);
+    Route::patch('/appointments/{appointment}', [AppointmentController::class, 'update']);
     Route::patch('/appointments/{appointment}/status', [AppointmentController::class, 'updateStatus']);
 });
 

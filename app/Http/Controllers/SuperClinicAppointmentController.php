@@ -8,12 +8,13 @@ use App\Http\Requests\Appointment\StoreAppointmentRequest;
 use App\Http\Requests\Appointment\UpdateAppointmentRequest;
 use App\Http\Requests\Appointment\UpdateAppointmentStatusRequest;
 use App\Models\Appointment;
+use App\Models\Clinic;
 use App\Models\User;
 use App\Services\AppointmentService;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 
-class AppointmentController extends Controller
+class SuperClinicAppointmentController extends Controller
 {
     use ApiResponse;
 
@@ -21,20 +22,12 @@ class AppointmentController extends Controller
     {
     }
 
-    public function index(IndexAppointmentRequest $request): JsonResponse
+    public function index(Clinic $clinic, IndexAppointmentRequest $request): JsonResponse
     {
-        $authUser = $request->user();
-
         $query = Appointment::query()
-            ->where('clinic_id', $authUser->clinic_id)
+            ->where('clinic_id', $clinic->id)
             ->with(['patient:id,name,email', 'dentist:id,name,email'])
             ->orderBy('start_at');
-
-        if ($authUser->role === 'dentist') {
-            $query->where('dentist_user_id', $authUser->id);
-        } elseif ($request->filled('dentist_user_id')) {
-            $query->where('dentist_user_id', $request->integer('dentist_user_id'));
-        }
 
         if ($request->filled('date') && ! $request->filled('from') && ! $request->filled('to')) {
             $date = Carbon::parse($request->string('date'));
@@ -49,6 +42,10 @@ class AppointmentController extends Controller
             $query->where('end_at', '<=', $request->string('to'));
         }
 
+        if ($request->filled('dentist_user_id')) {
+            $query->where('dentist_user_id', $request->integer('dentist_user_id'));
+        }
+
         if ($request->filled('patient_user_id')) {
             $query->where('patient_user_id', $request->integer('patient_user_id'));
         }
@@ -57,28 +54,27 @@ class AppointmentController extends Controller
             $query->where('status', $request->string('status'));
         }
 
-        return $this->successResponse($query->get(), 'Citas listadas.');
+        return $this->successResponse($query->get(), 'Citas de clínica listadas.');
     }
 
-    public function store(StoreAppointmentRequest $request): JsonResponse
+    public function store(Clinic $clinic, StoreAppointmentRequest $request): JsonResponse
     {
-        $authUser = $request->user();
         $data = $request->validated();
+        $authUser = $request->user();
 
-        $patient = $this->resolveScopedPatient($authUser->clinic_id, (int) $data['patient_user_id']);
-        $dentistId = $authUser->role === 'dentist' ? $authUser->id : (int) $data['dentist_user_id'];
-        $dentist = $this->resolveScopedDentist($authUser->clinic_id, $dentistId);
+        $patient = $this->resolveScopedPatient($clinic->id, (int) $data['patient_user_id']);
+        $dentist = $this->resolveScopedDentist($clinic->id, (int) $data['dentist_user_id']);
 
         if (! $patient || ! $dentist) {
             return $this->errorResponse('Paciente o dentista inválido.', ['appointment' => ['Paciente y dentista deben pertenecer a la clínica.']]);
         }
 
-        if ($this->appointmentService->hasDentistOverlap($authUser->clinic_id, $dentist->id, (string) $data['start_at'], (string) $data['end_at'])) {
+        if ($this->appointmentService->hasDentistOverlap($clinic->id, $dentist->id, (string) $data['start_at'], (string) $data['end_at'])) {
             return $this->errorResponse('Choque de horario.', ['appointment' => ['El dentista ya tiene una cita en ese horario.']]);
         }
 
         $appointment = Appointment::query()->create([
-            'clinic_id' => $authUser->clinic_id,
+            'clinic_id' => $clinic->id,
             'patient_user_id' => $patient->id,
             'dentist_user_id' => $dentist->id,
             'created_by' => $authUser->id,
@@ -89,15 +85,13 @@ class AppointmentController extends Controller
             'internal_notes' => $data['internal_notes'] ?? null,
         ]);
 
-        return $this->successResponse($appointment->load(['patient:id,name,email', 'dentist:id,name,email']), 'Cita creada.', 201);
+        return $this->successResponse($appointment->load(['patient:id,name,email', 'dentist:id,name,email']), 'Cita creada en clínica.', 201);
     }
 
-    public function show(Appointment $appointment): JsonResponse
+    public function show(Clinic $clinic, Appointment $appointment): JsonResponse
     {
-        $authUser = request()->user();
-
-        if (! $this->canAccessAppointment($appointment, $authUser->clinic_id, $authUser->role === 'dentist' ? $authUser->id : null)) {
-            return $this->errorResponse('Cita no encontrada.', ['appointment' => ['No existe en tu alcance.']], 404);
+        if (! $this->appointmentBelongsToClinic($appointment, $clinic->id)) {
+            return $this->errorResponse('Cita no encontrada.', ['appointment' => ['No existe en la clínica indicada.']], 404);
         }
 
         return $this->successResponse(
@@ -106,31 +100,24 @@ class AppointmentController extends Controller
         );
     }
 
-    public function update(UpdateAppointmentRequest $request, Appointment $appointment): JsonResponse
+    public function update(Clinic $clinic, UpdateAppointmentRequest $request, Appointment $appointment): JsonResponse
     {
-        $authUser = $request->user();
-
-        if (! $this->canAccessAppointment($appointment, $authUser->clinic_id, $authUser->role === 'dentist' ? $authUser->id : null)) {
-            return $this->errorResponse('Cita no encontrada.', ['appointment' => ['No existe en tu alcance.']], 404);
+        if (! $this->appointmentBelongsToClinic($appointment, $clinic->id)) {
+            return $this->errorResponse('Cita no encontrada.', ['appointment' => ['No existe en la clínica indicada.']], 404);
         }
 
         $data = $request->validated();
-
         $patientId = (int) ($data['patient_user_id'] ?? $appointment->patient_user_id);
-        $dentistId = $authUser->role === 'dentist'
-            ? $authUser->id
-            : (int) ($data['dentist_user_id'] ?? $appointment->dentist_user_id);
+        $dentistId = (int) ($data['dentist_user_id'] ?? $appointment->dentist_user_id);
         $startAt = (string) ($data['start_at'] ?? $appointment->start_at->toDateTimeString());
         $endAt = (string) ($data['end_at'] ?? $appointment->end_at->toDateTimeString());
 
-        $patient = $this->resolveScopedPatient($authUser->clinic_id, $patientId);
-
+        $patient = $this->resolveScopedPatient($clinic->id, $patientId);
         if (! $patient) {
             return $this->errorResponse('Paciente inválido.', ['patient_user_id' => ['El paciente debe pertenecer a la clínica y tener rol pacient.']]);
         }
 
-        $dentist = $this->resolveScopedDentist($authUser->clinic_id, $dentistId);
-
+        $dentist = $this->resolveScopedDentist($clinic->id, $dentistId);
         if (! $dentist) {
             return $this->errorResponse('Dentista inválido.', ['dentist_user_id' => ['El dentista debe pertenecer a la clínica y tener rol dentist.']]);
         }
@@ -139,13 +126,7 @@ class AppointmentController extends Controller
             return $this->errorResponse('Rango de horario inválido.', ['end_at' => ['end_at debe ser mayor que start_at.']]);
         }
 
-        if ($this->appointmentService->hasDentistOverlapExceptAppointment(
-            $authUser->clinic_id,
-            $dentist->id,
-            $startAt,
-            $endAt,
-            $appointment->id,
-        )) {
+        if ($this->appointmentService->hasDentistOverlapExceptAppointment($clinic->id, $dentist->id, $startAt, $endAt, $appointment->id)) {
             return $this->errorResponse('Choque de horario.', ['appointment' => ['El dentista ya tiene una cita en ese horario.']]);
         }
 
@@ -160,12 +141,10 @@ class AppointmentController extends Controller
         );
     }
 
-    public function updateStatus(UpdateAppointmentStatusRequest $request, Appointment $appointment): JsonResponse
+    public function updateStatus(Clinic $clinic, UpdateAppointmentStatusRequest $request, Appointment $appointment): JsonResponse
     {
-        $authUser = $request->user();
-
-        if (! $this->canAccessAppointment($appointment, $authUser->clinic_id, $authUser->role === 'dentist' ? $authUser->id : null)) {
-            return $this->errorResponse('Cita no encontrada.', ['appointment' => ['No existe en tu alcance.']], 404);
+        if (! $this->appointmentBelongsToClinic($appointment, $clinic->id)) {
+            return $this->errorResponse('Cita no encontrada.', ['appointment' => ['No existe en la clínica indicada.']], 404);
         }
 
         $appointment->update(['status' => $request->string('status')]);
@@ -173,17 +152,9 @@ class AppointmentController extends Controller
         return $this->successResponse($appointment, 'Estado de cita actualizado.');
     }
 
-    private function canAccessAppointment(Appointment $appointment, int $clinicId, ?int $dentistId = null): bool
+    private function appointmentBelongsToClinic(Appointment $appointment, int $clinicId): bool
     {
-        if ($appointment->clinic_id !== $clinicId) {
-            return false;
-        }
-
-        if ($dentistId !== null && $appointment->dentist_user_id !== $dentistId) {
-            return false;
-        }
-
-        return true;
+        return $appointment->clinic_id === $clinicId;
     }
 
     private function resolveScopedPatient(int $clinicId, int $patientId): ?User
