@@ -2,25 +2,18 @@
 
 namespace App\Http\Controllers;
 
-use App\Http\Controllers\Concerns\ApiResponse;
-use App\Models\Appointment;
+use App\Http\Requests\Appointment\IndexAppointmentRequest;
 use Illuminate\Http\JsonResponse;
 
 class DentistAppointmentController extends Controller
 {
-    use ApiResponse;
-
-    public function index(): JsonResponse
+    public function __construct(private readonly AppointmentController $appointmentController)
     {
-        $authUser = request()->user();
+    }
 
-        $appointments = Appointment::query()
-            ->where('clinic_id', $authUser->clinic_id)
-            ->where('dentist_user_id', $authUser->id)
-            ->with(['patient:id,name,email'])
-            ->orderBy('start_at')
-            ->get();
-
-        return $this->successResponse($appointments, 'Citas del dentista listadas.');
+    public function index(IndexAppointmentRequest $request): JsonResponse
+    {
+        // Legacy compatibility endpoint: delegates to the unified /appointments listing flow.
+        return $this->appointmentController->index($request);
     }
 }

@@ -30,16 +30,16 @@ class SuperClinicAppointmentController extends Controller
             ->orderBy('start_at');
 
         if ($request->filled('date') && ! $request->filled('from') && ! $request->filled('to')) {
-            $date = Carbon::parse($request->string('date'));
+            $date = Carbon::parse((string) $request->string('date'));
             $query->whereBetween('start_at', [$date->copy()->startOfDay(), $date->copy()->endOfDay()]);
         }
 
         if ($request->filled('from')) {
-            $query->where('start_at', '>=', $request->string('from'));
+            $query->where('start_at', '>=', (string) $request->string('from'));
         }
 
         if ($request->filled('to')) {
-            $query->where('end_at', '<=', $request->string('to'));
+            $query->where('end_at', '<=', (string) $request->string('to'));
         }
 
         if ($request->filled('dentist_user_id')) {
@@ -51,7 +51,7 @@ class SuperClinicAppointmentController extends Controller
         }
 
         if ($request->filled('status')) {
-            $query->where('status', $request->string('status'));
+            $query->where('status', (string) $request->string('status'));
         }
 
         return $this->successResponse($query->get(), 'Citas de clínica listadas.');
@@ -147,7 +147,7 @@ class SuperClinicAppointmentController extends Controller
             return $this->errorResponse('Cita no encontrada.', ['appointment' => ['No existe en la clínica indicada.']], 404);
         }
 
-        $appointment->update(['status' => $request->string('status')]);
+        $appointment->update(['status' => (string) $request->string('status')]);
 
         return $this->successResponse($appointment, 'Estado de cita actualizado.');
     }
