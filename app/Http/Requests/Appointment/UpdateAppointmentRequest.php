@@ -25,9 +25,10 @@ class UpdateAppointmentRequest extends FormRequest
                 'exists:users,id',
             ],
             'start_at' => ['sometimes', 'required', 'date'],
-            'end_at' => ['sometimes', 'required', 'date', 'after:start_at'],
+            'end_at' => ['sometimes', 'required', 'date'],
             'reason' => ['sometimes', 'nullable', 'string', 'max:255'],
             'internal_notes' => ['sometimes', 'nullable', 'string'],
+            'notes' => ['sometimes', 'nullable', 'string'],
             'status' => ['sometimes', 'nullable', Rule::in(Appointment::STATUSES)],
         ];
     }

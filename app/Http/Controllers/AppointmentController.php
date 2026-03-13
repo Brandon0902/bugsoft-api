@@ -86,7 +86,7 @@ class AppointmentController extends Controller
             'end_at' => $data['end_at'],
             'status' => 'scheduled',
             'reason' => $data['reason'] ?? null,
-            'internal_notes' => $data['internal_notes'] ?? null,
+            'internal_notes' => $data['internal_notes'] ?? ($data['notes'] ?? null),
         ]);
 
         return $this->successResponse($appointment->load(['patient:id,name,email', 'dentist:id,name,email']), 'Cita creada.', 201);
@@ -139,7 +139,7 @@ class AppointmentController extends Controller
             return $this->errorResponse('Rango de horario inválido.', ['end_at' => ['end_at debe ser mayor que start_at.']]);
         }
 
-        if ($this->appointmentService->hasDentistOverlapExceptAppointment(
+        if ($this->appointmentService->hasDentistOverlap(
             $authUser->clinic_id,
             $dentist->id,
             $startAt,
@@ -147,6 +147,10 @@ class AppointmentController extends Controller
             $appointment->id,
         )) {
             return $this->errorResponse('Choque de horario.', ['appointment' => ['El dentista ya tiene una cita en ese horario.']]);
+        }
+
+        if (array_key_exists('notes', $data) && ! array_key_exists('internal_notes', $data)) {
+            $data['internal_notes'] = $data['notes'];
         }
 
         $appointment->fill($data);
