@@ -22,7 +22,7 @@ class SuperClinicAppointmentController extends Controller
     {
     }
 
-    public function index(Clinic $clinic, IndexAppointmentRequest $request): JsonResponse
+    public function index(IndexAppointmentRequest $request, Clinic $clinic): JsonResponse
     {
         $query = Appointment::query()
             ->where('clinic_id', $clinic->id)
@@ -57,7 +57,7 @@ class SuperClinicAppointmentController extends Controller
         return $this->successResponse($query->get(), 'Citas de clínica listadas.');
     }
 
-    public function store(Clinic $clinic, StoreAppointmentRequest $request): JsonResponse
+    public function store(StoreAppointmentRequest $request, Clinic $clinic): JsonResponse
     {
         $data = $request->validated();
         $authUser = $request->user();
@@ -82,7 +82,7 @@ class SuperClinicAppointmentController extends Controller
             'end_at' => $data['end_at'],
             'status' => 'scheduled',
             'reason' => $data['reason'] ?? null,
-            'internal_notes' => $data['internal_notes'] ?? null,
+            'internal_notes' => $data['internal_notes'] ?? ($data['notes'] ?? null),
         ]);
 
         return $this->successResponse($appointment->load(['patient:id,name,email', 'dentist:id,name,email']), 'Cita creada en clínica.', 201);
@@ -100,7 +100,7 @@ class SuperClinicAppointmentController extends Controller
         );
     }
 
-    public function update(Clinic $clinic, UpdateAppointmentRequest $request, Appointment $appointment): JsonResponse
+    public function update(UpdateAppointmentRequest $request, Clinic $clinic, Appointment $appointment): JsonResponse
     {
         if (! $this->appointmentBelongsToClinic($appointment, $clinic->id)) {
             return $this->errorResponse('Cita no encontrada.', ['appointment' => ['No existe en la clínica indicada.']], 404);
@@ -126,8 +126,12 @@ class SuperClinicAppointmentController extends Controller
             return $this->errorResponse('Rango de horario inválido.', ['end_at' => ['end_at debe ser mayor que start_at.']]);
         }
 
-        if ($this->appointmentService->hasDentistOverlapExceptAppointment($clinic->id, $dentist->id, $startAt, $endAt, $appointment->id)) {
+        if ($this->appointmentService->hasDentistOverlap($clinic->id, $dentist->id, $startAt, $endAt, $appointment->id)) {
             return $this->errorResponse('Choque de horario.', ['appointment' => ['El dentista ya tiene una cita en ese horario.']]);
+        }
+
+        if (array_key_exists('notes', $data) && ! array_key_exists('internal_notes', $data)) {
+            $data['internal_notes'] = $data['notes'];
         }
 
         $appointment->fill($data);
@@ -141,7 +145,7 @@ class SuperClinicAppointmentController extends Controller
         );
     }
 
-    public function updateStatus(Clinic $clinic, UpdateAppointmentStatusRequest $request, Appointment $appointment): JsonResponse
+    public function updateStatus(UpdateAppointmentStatusRequest $request, Clinic $clinic, Appointment $appointment): JsonResponse
     {
         if (! $this->appointmentBelongsToClinic($appointment, $clinic->id)) {
             return $this->errorResponse('Cita no encontrada.', ['appointment' => ['No existe en la clínica indicada.']], 404);
