@@ -95,5 +95,6 @@ Route::middleware(['auth:sanctum', 'role:admin,receptionist,dentist'])->group(fu
     Route::patch('/appointments/{appointment}/status', [AppointmentController::class, 'updateStatus']);
 });
 
+// Legacy compatibility endpoint for dentist clients still consuming /dentist/appointments.
 Route::middleware(['auth:sanctum', 'role:dentist'])->get('/dentist/appointments', [DentistAppointmentController::class, 'index']);
 Route::middleware(['auth:sanctum', 'role:pacient'])->get('/pacient/appointments', [PacientAppointmentController::class, 'index']);
