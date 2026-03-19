@@ -56,6 +56,7 @@ Route::middleware(['auth:sanctum', 'role:super_admin'])->prefix('super')->group(
     Route::delete('/clinics/{clinic}/receptionists/{id}', [SuperClinicReceptionistController::class, 'destroy']);
 
     Route::get('/clinics/{clinic}/appointments', [SuperClinicAppointmentController::class, 'index']);
+    Route::get('/clinics/{clinic}/appointments/available-dentists', [SuperClinicAppointmentController::class, 'availableDentists']);
     Route::post('/clinics/{clinic}/appointments', [SuperClinicAppointmentController::class, 'store']);
     Route::get('/clinics/{clinic}/appointments/{appointment}', [SuperClinicAppointmentController::class, 'show']);
     Route::patch('/clinics/{clinic}/appointments/{appointment}', [SuperClinicAppointmentController::class, 'update']);
@@ -90,6 +91,7 @@ Route::middleware(['auth:sanctum', 'role:admin'])->prefix('admin')->group(functi
 });
 
 Route::middleware(['auth:sanctum', 'role:admin,receptionist,dentist'])->group(function (): void {
+    Route::get('/appointments/available-dentists', [AppointmentController::class, 'availableDentists']);
     Route::post('/appointments', [AppointmentController::class, 'store']);
     Route::get('/appointments', [AppointmentController::class, 'index']);
     Route::get('/appointments/{appointment}', [AppointmentController::class, 'show']);
