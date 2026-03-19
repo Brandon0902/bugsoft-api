@@ -23,7 +23,7 @@ class AdminUserController extends Controller
             ->where('clinic_id', $user->clinic_id)
             ->whereIn('role', ['dentist', 'receptionist'])
             ->where('id', '!=', $user->id)
-            ->with('dentistProfile')
+            ->with(['dentistProfile', 'dentistProfile.specialties'])
             ->latest()
             ->get();
 
@@ -44,7 +44,7 @@ class AdminUserController extends Controller
     {
         $user = $this->findClinicStaff($user);
 
-        return $this->successResponse($user->load('dentistProfile'), 'Usuario encontrado.');
+        return $this->successResponse($user->load(['dentistProfile', 'dentistProfile.specialties']), 'Usuario encontrado.');
     }
 
     public function update(User $user, UpdateAdminUserRequest $request): JsonResponse
@@ -53,9 +53,10 @@ class AdminUserController extends Controller
         $data = $request->validated();
         unset($data['clinic_id']);
         $dentistProfileData = $data['dentist_profile'] ?? null;
-        unset($data['dentist_profile']);
+        $specialtyIds = $data['specialty_ids'] ?? null;
+        unset($data['dentist_profile'], $data['specialty_ids']);
 
-        DB::transaction(function () use ($user, $data, $dentistProfileData): void {
+        DB::transaction(function () use ($user, $data, $dentistProfileData, $specialtyIds): void {
             $oldRole = $user->role;
             $user->fill($data);
             $user->save();
@@ -87,9 +88,18 @@ class AdminUserController extends Controller
                     $profileData,
                 );
             }
+
+            if ($user->role === 'dentist' && is_array($specialtyIds)) {
+                $profile = DentistProfile::query()->firstOrCreate(
+                    ['user_id' => $user->id],
+                    ['clinic_id' => $user->clinic_id],
+                );
+
+                $profile->specialties()->sync($specialtyIds);
+            }
         });
 
-        return $this->successResponse($user->fresh()->load('dentistProfile'), 'Usuario actualizado.');
+        return $this->successResponse($user->fresh()->load(['dentistProfile', 'dentistProfile.specialties']), 'Usuario actualizado.');
     }
 
     public function destroy(User $user): JsonResponse

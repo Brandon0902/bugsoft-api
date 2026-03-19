@@ -4,13 +4,14 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
-class Clinic extends Model
+class Specialty extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['name', 'phone', 'email', 'address', 'status'];
+    protected $fillable = ['name', 'description', 'status'];
 
     protected function casts(): array
     {
@@ -19,14 +20,10 @@ class Clinic extends Model
         ];
     }
 
-    public function users(): HasMany
+    public function dentistProfiles(): BelongsToMany
     {
-        return $this->hasMany(User::class);
-    }
-
-    public function appointments(): HasMany
-    {
-        return $this->hasMany(Appointment::class);
+        return $this->belongsToMany(DentistProfile::class, 'dentist_specialty')
+            ->withTimestamps();
     }
 
     public function services(): HasMany
