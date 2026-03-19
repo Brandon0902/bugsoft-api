@@ -34,6 +34,7 @@ class AdminReceptionistController extends Controller
         $data['role'] = 'receptionist';
 
         $newUser = $userCreationService->createClinicStaff((int) $authUser->clinic_id, $data);
+        $newUser->unsetRelation('dentistProfile');
 
         return $this->successResponse($newUser, 'Recepcionista creado en clínica.', 201);
     }
