@@ -3,6 +3,9 @@
 namespace App\Services;
 
 use App\Models\Appointment;
+use App\Models\User;
+use Carbon\Carbon;
+use Illuminate\Database\Eloquent\Collection;
 
 class AppointmentService
 {
@@ -36,5 +39,42 @@ class AppointmentService
         int $ignoreAppointmentId
     ): bool {
         return $this->hasDentistOverlap($clinicId, $dentistId, $startAt, $endAt, $ignoreAppointmentId);
+    }
+
+    public function calculateEndAtFromServiceDuration(string $startAt, int $durationMinutes): Carbon
+    {
+        return Carbon::parse($startAt)->addMinutes($durationMinutes);
+    }
+
+    public function findAvailableDentists(
+        int $clinicId,
+        int $specialtyId,
+        string $requestedStartAt,
+        string $requestedEndAt,
+        ?int $excludeAppointmentId = null,
+    ): Collection {
+        $busyDentistIds = Appointment::query()
+            ->where('clinic_id', $clinicId)
+            ->whereNotIn('status', ['canceled'])
+            ->where('start_at', '<', $requestedEndAt)
+            ->where('end_at', '>', $requestedStartAt)
+            ->when(
+                $excludeAppointmentId !== null,
+                fn ($query) => $query->where('id', '!=', $excludeAppointmentId)
+            )
+            ->pluck('dentist_user_id');
+
+        return User::query()
+            ->where('clinic_id', $clinicId)
+            ->where('role', 'dentist')
+            ->whereNotIn('id', $busyDentistIds)
+            ->whereHas('dentistProfile.specialties', fn ($query) => $query->where('specialties.id', $specialtyId))
+            ->with([
+                'dentistProfile:id,user_id,clinic_id,license_number,color',
+                'dentistProfile.specialties:id,name',
+            ])
+            ->select(['id', 'name', 'email'])
+            ->orderBy('name')
+            ->get();
     }
 }

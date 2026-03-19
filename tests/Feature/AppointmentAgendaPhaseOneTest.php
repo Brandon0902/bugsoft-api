@@ -285,7 +285,7 @@ class AppointmentAgendaPhaseOneTest extends TestCase
             ->assertJsonPath('data.end_at', '2026-06-10T12:15:00.000000Z');
     }
 
-    public function test_lists_compatible_dentists_for_service_in_same_clinic(): void
+    public function test_available_dentists_returns_only_compatible_and_truly_available_dentists(): void
     {
         [$clinic, $admin, $dentist] = $this->makeClinicActorDentistPatient('admin');
         $compatibleService = $this->createServiceForClinicAndAssignToDentist($clinic, $dentist, 30);
@@ -293,13 +293,201 @@ class AppointmentAgendaPhaseOneTest extends TestCase
 
         Sanctum::actingAs($admin);
 
-        $this->getJson('/api/appointments/available-dentists?service_id='.$compatibleService->id.'&date=2026-06-10')
+        $this->getJson('/api/appointments/available-dentists?service_id='.$compatibleService->id.'&start_at=2026-06-10 10:00:00')
             ->assertOk()
-            ->assertJsonCount(1, 'data.dentists')
-            ->assertJsonPath('data.dentists.0.id', $dentist->id)
-            ->assertJsonMissingPath('data.dentists.1.id');
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.id', $dentist->id)
+            ->assertJsonPath('meta.requested_start_at', '2026-06-10 10:00:00')
+            ->assertJsonPath('meta.requested_end_at', '2026-06-10 10:30:00')
+            ->assertJsonMissingPath('data.1.id');
 
         $this->assertNotSame($dentist->id, $notCompatibleDentist->id);
+    }
+
+    public function test_available_dentists_excludes_dentists_with_overlapping_appointments(): void
+    {
+        [$clinic, $admin, $dentistA, $patient] = $this->makeClinicActorDentistPatient('admin');
+        $dentistB = User::factory()->create(['clinic_id' => $clinic->id, 'role' => 'dentist']);
+        $service = $this->createServiceForClinicAndAssignToDentist($clinic, $dentistA, 60);
+        $this->assignServiceSpecialtyToDentist($clinic, $dentistB, $service);
+
+        $this->createAppointment(
+            $clinic->id,
+            $patient->id,
+            $dentistA->id,
+            $admin->id,
+            '2026-06-10 10:15:00',
+            '2026-06-10 10:45:00'
+        );
+
+        Sanctum::actingAs($admin);
+
+        $this->getJson('/api/appointments/available-dentists?service_id='.$service->id.'&start_at=2026-06-10 10:00:00')
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.id', $dentistB->id);
+    }
+
+    public function test_available_dentists_keeps_dentist_when_existing_appointment_ends_exactly_at_requested_start(): void
+    {
+        [$clinic, $admin, $dentist, $patient] = $this->makeClinicActorDentistPatient('admin');
+        $service = $this->createServiceForClinicAndAssignToDentist($clinic, $dentist, 60);
+
+        $this->createAppointment(
+            $clinic->id,
+            $patient->id,
+            $dentist->id,
+            $admin->id,
+            '2026-06-10 09:00:00',
+            '2026-06-10 10:00:00'
+        );
+
+        Sanctum::actingAs($admin);
+
+        $this->getJson('/api/appointments/available-dentists?service_id='.$service->id.'&start_at=2026-06-10 10:00:00')
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.id', $dentist->id);
+    }
+
+    public function test_available_dentists_keeps_dentist_when_existing_appointment_starts_at_requested_end(): void
+    {
+        [$clinic, $admin, $dentist, $patient] = $this->makeClinicActorDentistPatient('admin');
+        $service = $this->createServiceForClinicAndAssignToDentist($clinic, $dentist, 60);
+
+        $this->createAppointment(
+            $clinic->id,
+            $patient->id,
+            $dentist->id,
+            $admin->id,
+            '2026-06-10 11:00:00',
+            '2026-06-10 11:30:00'
+        );
+
+        Sanctum::actingAs($admin);
+
+        $this->getJson('/api/appointments/available-dentists?service_id='.$service->id.'&start_at=2026-06-10 10:00:00')
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.id', $dentist->id);
+    }
+
+    public function test_available_dentists_uses_service_duration_to_calculate_requested_end_at(): void
+    {
+        [$clinic, $admin, $dentist] = $this->makeClinicActorDentistPatient('admin');
+        $service = $this->createServiceForClinicAndAssignToDentist($clinic, $dentist, 45);
+
+        Sanctum::actingAs($admin);
+
+        $this->getJson('/api/appointments/available-dentists?service_id='.$service->id.'&start_at=2026-06-10 10:00:00')
+            ->assertOk()
+            ->assertJsonPath('meta.requested_end_at', '2026-06-10 10:45:00')
+            ->assertJsonPath('meta.duration_minutes', 45);
+    }
+
+    public function test_available_dentists_respects_authenticated_clinic_scope(): void
+    {
+        [$clinicA, $adminA, $dentistA] = $this->makeClinicActorDentistPatient('admin');
+        [$clinicB, , $dentistB] = $this->makeClinicActorDentistPatient('admin');
+        $serviceA = $this->createServiceForClinicAndAssignToDentist($clinicA, $dentistA, 30);
+        $this->createServiceForClinicAndAssignToDentist($clinicB, $dentistB, 30);
+
+        Sanctum::actingAs($adminA);
+
+        $this->getJson('/api/appointments/available-dentists?service_id='.$serviceA->id.'&start_at=2026-06-10 10:00:00')
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.id', $dentistA->id)
+            ->assertJsonMissing(['id' => $dentistB->id]);
+    }
+
+    public function test_super_admin_available_dentists_uses_clinic_from_url_scope(): void
+    {
+        $superAdmin = User::factory()->create(['role' => 'super_admin', 'clinic_id' => null]);
+        $clinicA = Clinic::query()->create(['name' => 'Clinic Scope A']);
+        $clinicB = Clinic::query()->create(['name' => 'Clinic Scope B']);
+        $dentistA = User::factory()->create(['clinic_id' => $clinicA->id, 'role' => 'dentist']);
+        $dentistB = User::factory()->create(['clinic_id' => $clinicB->id, 'role' => 'dentist']);
+        $serviceA = $this->createServiceForClinicAndAssignToDentist($clinicA, $dentistA, 30);
+        $this->createServiceForClinicAndAssignToDentist($clinicB, $dentistB, 30);
+
+        Sanctum::actingAs($superAdmin);
+
+        $this->getJson("/api/super/clinics/{$clinicA->id}/appointments/available-dentists?service_id={$serviceA->id}&start_at=2026-06-10 10:00:00")
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.id', $dentistA->id)
+            ->assertJsonMissing(['id' => $dentistB->id]);
+    }
+
+    public function test_available_dentists_can_ignore_current_appointment_when_exclude_appointment_id_is_sent(): void
+    {
+        [$clinic, $admin, $dentist, $patient] = $this->makeClinicActorDentistPatient('admin');
+        $service = $this->createServiceForClinicAndAssignToDentist($clinic, $dentist, 60);
+
+        $appointment = Appointment::query()->create([
+            'clinic_id' => $clinic->id,
+            'patient_user_id' => $patient->id,
+            'dentist_user_id' => $dentist->id,
+            'service_id' => $service->id,
+            'created_by' => $admin->id,
+            'start_at' => '2026-06-10 10:00:00',
+            'end_at' => '2026-06-10 11:00:00',
+            'status' => 'scheduled',
+        ]);
+
+        Sanctum::actingAs($admin);
+
+        $this->getJson('/api/appointments/available-dentists?service_id='.$service->id.'&start_at=2026-06-10 10:00:00')
+            ->assertOk()
+            ->assertJsonCount(0, 'data');
+
+        $this->getJson('/api/appointments/available-dentists?service_id='.$service->id.'&start_at=2026-06-10 10:00:00&exclude_appointment_id='.$appointment->id)
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.id', $dentist->id);
+    }
+
+    public function test_create_and_update_keep_rejecting_overlaps_with_same_rule_used_in_available_dentists(): void
+    {
+        [$clinic, $admin, $dentist, $patient] = $this->makeClinicActorDentistPatient('admin');
+        $patientTwo = User::factory()->create(['clinic_id' => $clinic->id, 'role' => 'pacient']);
+        $service = $this->createServiceForClinicAndAssignToDentist($clinic, $dentist, 60);
+
+        Sanctum::actingAs($admin);
+
+        $existing = $this->postJson('/api/appointments', [
+            'patient_user_id' => $patient->id,
+            'dentist_user_id' => $dentist->id,
+            'service_id' => $service->id,
+            'start_at' => '2026-06-10 10:00:00',
+        ])->assertCreated();
+
+        $this->postJson('/api/appointments', [
+            'patient_user_id' => $patientTwo->id,
+            'dentist_user_id' => $dentist->id,
+            'service_id' => $service->id,
+            'start_at' => '2026-06-10 10:30:00',
+        ])
+            ->assertUnprocessable()
+            ->assertJsonPath('errors.appointment.0', 'El dentista ya tiene una cita en ese horario.');
+
+        $existingId = (int) $existing->json('data.id');
+        $other = $this->postJson('/api/appointments', [
+            'patient_user_id' => $patientTwo->id,
+            'dentist_user_id' => $dentist->id,
+            'service_id' => $service->id,
+            'start_at' => '2026-06-10 12:00:00',
+        ])->assertCreated();
+        $otherId = (int) $other->json('data.id');
+
+        $this->patchJson("/api/appointments/{$otherId}", [
+            'start_at' => '2026-06-10 10:30:00',
+        ])
+            ->assertUnprocessable()
+            ->assertJsonPath('errors.appointment.0', 'El dentista ya tiene una cita en ese horario.');
+
+        $this->assertNotSame($existingId, $otherId);
     }
 
     public function test_pacient_cannot_access_general_appointment_endpoints(): void
@@ -357,6 +545,16 @@ class AppointmentAgendaPhaseOneTest extends TestCase
         $profile->specialties()->syncWithoutDetaching([$service->specialty_id]);
 
         return $service;
+    }
+
+    private function assignServiceSpecialtyToDentist(Clinic $clinic, User $dentist, Service $service): void
+    {
+        $profile = DentistProfile::query()->firstOrCreate(
+            ['user_id' => $dentist->id],
+            ['clinic_id' => $clinic->id]
+        );
+
+        $profile->specialties()->syncWithoutDetaching([$service->specialty_id]);
     }
 
     private function createServiceForClinic(
