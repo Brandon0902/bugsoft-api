@@ -20,13 +20,15 @@ class UserCreationService
      *     specialty?: ?string,
      *     license_number?: ?string,
      *     color?: ?string
-     *   }
+     *   },
+     *   specialty_ids?: ?array<int>
      * }  $data
      */
     public function createClinicStaff(int $clinicId, array $data): User
     {
         return DB::transaction(function () use ($clinicId, $data) {
             $dentistProfileData = $data['dentist_profile'] ?? null;
+            $specialtyIds = $data['specialty_ids'] ?? null;
 
             $user = User::query()->create([
                 'clinic_id' => $clinicId,
@@ -39,16 +41,20 @@ class UserCreationService
             ]);
 
             if ($user->role === 'dentist') {
-                DentistProfile::query()->create([
+                $profile = DentistProfile::query()->create([
                     'user_id' => $user->id,
                     'clinic_id' => $clinicId,
                     'specialty' => $dentistProfileData['specialty'] ?? null,
                     'license_number' => $dentistProfileData['license_number'] ?? null,
                     'color' => $dentistProfileData['color'] ?? null,
                 ]);
+
+                if (is_array($specialtyIds)) {
+                    $profile->specialties()->sync($specialtyIds);
+                }
             }
 
-            return $user->load('dentistProfile');
+            return $user->load('dentistProfile.specialties');
         });
     }
 }

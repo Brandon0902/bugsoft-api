@@ -16,6 +16,7 @@ class Appointment extends Model
         'clinic_id',
         'patient_user_id',
         'dentist_user_id',
+        'service_id',
         'created_by',
         'start_at',
         'end_at',
@@ -45,5 +46,10 @@ class Appointment extends Model
     public function dentist(): BelongsTo
     {
         return $this->belongsTo(User::class, 'dentist_user_id');
+    }
+
+    public function service(): BelongsTo
+    {
+        return $this->belongsTo(Service::class);
     }
 }

@@ -29,6 +29,8 @@ class UpdateSuperClinicUserRequest extends FormRequest
             'dentist_profile.specialty' => ['nullable', 'string', 'max:255'],
             'dentist_profile.license_number' => ['nullable', 'string', 'max:255'],
             'dentist_profile.color' => ['nullable', 'string', 'max:20'],
+            'specialty_ids' => ['nullable', 'array'],
+            'specialty_ids.*' => ['integer', 'distinct', 'exists:specialties,id'],
         ];
     }
 }

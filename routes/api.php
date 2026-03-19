@@ -14,6 +14,8 @@ use App\Http\Controllers\SuperClinicPatientController;
 use App\Http\Controllers\SuperClinicReceptionistController;
 use App\Http\Controllers\SuperClinicUserController;
 use App\Http\Controllers\SuperClinicAppointmentController;
+use App\Http\Controllers\SpecialtyController;
+use App\Http\Controllers\ServiceController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('auth')->group(function (): void {
@@ -93,6 +95,23 @@ Route::middleware(['auth:sanctum', 'role:admin,receptionist,dentist'])->group(fu
     Route::get('/appointments/{appointment}', [AppointmentController::class, 'show']);
     Route::patch('/appointments/{appointment}', [AppointmentController::class, 'update']);
     Route::patch('/appointments/{appointment}/status', [AppointmentController::class, 'updateStatus']);
+});
+
+
+Route::middleware(['auth:sanctum', 'role:super_admin'])->group(function (): void {
+    Route::get('/specialties', [SpecialtyController::class, 'index']);
+    Route::post('/specialties', [SpecialtyController::class, 'store']);
+    Route::get('/specialties/{specialty}', [SpecialtyController::class, 'show']);
+    Route::patch('/specialties/{specialty}', [SpecialtyController::class, 'update']);
+    Route::delete('/specialties/{specialty}', [SpecialtyController::class, 'destroy']);
+});
+
+Route::middleware(['auth:sanctum', 'role:admin'])->group(function (): void {
+    Route::get('/services', [ServiceController::class, 'index']);
+    Route::post('/services', [ServiceController::class, 'store']);
+    Route::get('/services/{service}', [ServiceController::class, 'show']);
+    Route::patch('/services/{service}', [ServiceController::class, 'update']);
+    Route::delete('/services/{service}', [ServiceController::class, 'destroy']);
 });
 
 // Legacy compatibility endpoint for dentist clients still consuming /dentist/appointments.
