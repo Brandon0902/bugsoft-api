@@ -32,4 +32,11 @@ class UpdateAppointmentRequest extends FormRequest
             'status' => ['sometimes', 'nullable', Rule::in(Appointment::STATUSES)],
         ];
     }
+
+    public function messages(): array
+    {
+        return [
+            'dentist_user_id.prohibited' => 'El campo dentist user id está prohibido.',
+        ];
+    }
 }

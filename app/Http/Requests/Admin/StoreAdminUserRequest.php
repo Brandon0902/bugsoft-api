@@ -24,9 +24,9 @@ class StoreAdminUserRequest extends FormRequest
 
             // ---- Dentist profile (solo cuando role = dentist) ----
             'dentist_profile' => ['nullable', 'array'],
-            'dentist_profile.specialty' => ['required_if:role,dentist', 'nullable', 'string', 'max:255'],
-            'dentist_profile.license_number' => ['required_if:role,dentist', 'nullable', 'string', 'max:255'],
-            'dentist_profile.color' => ['required_if:role,dentist', 'nullable', 'string', 'max:20'],
+            'dentist_profile.specialty' => ['nullable', 'string', 'max:255'],
+            'dentist_profile.license_number' => ['nullable', 'string', 'max:255'],
+            'dentist_profile.color' => ['nullable', 'string', 'max:20'],
         ];
     }
 }
