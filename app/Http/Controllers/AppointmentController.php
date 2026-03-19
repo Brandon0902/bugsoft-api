@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Http\Controllers\Concerns\ApiResponse;
+use App\Http\Requests\Appointment\AvailableDentistsRequest;
 use App\Http\Requests\Appointment\IndexAppointmentRequest;
 use App\Http\Requests\Appointment\StoreAppointmentRequest;
 use App\Http\Requests\Appointment\UpdateAppointmentRequest;
@@ -13,7 +14,6 @@ use App\Models\User;
 use App\Services\AppointmentService;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Http\Request;
 
 class AppointmentController extends Controller
 {
@@ -201,13 +201,10 @@ class AppointmentController extends Controller
         );
     }
 
-    public function availableDentists(Request $request): JsonResponse
+    public function availableDentists(AvailableDentistsRequest $request): JsonResponse
     {
         $authUser = $request->user();
-        $validated = $request->validate([
-            'service_id' => ['required', 'integer', 'exists:services,id'],
-            'date' => ['nullable', 'date'],
-        ]);
+        $validated = $request->validated();
 
         $service = $this->resolveScopedService($authUser->clinic_id, (int) $validated['service_id']);
 
@@ -215,19 +212,45 @@ class AppointmentController extends Controller
             return $this->errorResponse('Servicio inválido.', ['service_id' => ['El servicio debe pertenecer a la clínica.']]);
         }
 
-        $dentists = User::query()
-            ->where('clinic_id', $authUser->clinic_id)
-            ->where('role', 'dentist')
-            ->whereHas('dentistProfile.specialties', fn ($query) => $query->where('specialties.id', $service->specialty_id))
-            ->select(['id', 'name', 'email'])
-            ->orderBy('name')
-            ->get();
+        $excludeAppointmentId = isset($validated['exclude_appointment_id'])
+            ? (int) $validated['exclude_appointment_id']
+            : null;
+        $startAt = Carbon::parse((string) $validated['start_at']);
+        $endAt = $this->appointmentService->calculateEndAtFromServiceDuration(
+            $startAt->toDateTimeString(),
+            (int) $service->duration_minutes
+        );
 
-        return $this->successResponse([
-            'service' => $service->only(['id', 'name', 'specialty_id', 'duration_minutes']),
-            'date' => $validated['date'] ?? null,
-            'dentists' => $dentists,
-        ], 'Dentistas compatibles listados.');
+        if ($excludeAppointmentId !== null && ! Appointment::query()
+            ->where('id', $excludeAppointmentId)
+            ->where('clinic_id', $authUser->clinic_id)
+            ->exists()
+        ) {
+            return $this->errorResponse(
+                'Cita a excluir inválida.',
+                ['exclude_appointment_id' => ['La cita a excluir debe pertenecer a la clínica.']]
+            );
+        }
+
+        $dentists = $this->appointmentService->findAvailableDentists(
+            $authUser->clinic_id,
+            (int) $service->specialty_id,
+            $startAt->toDateTimeString(),
+            $endAt->toDateTimeString(),
+            $excludeAppointmentId,
+        );
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Available dentists fetched successfully',
+            'data' => $dentists,
+            'meta' => [
+                'service_id' => $service->id,
+                'requested_start_at' => $startAt->toDateTimeString(),
+                'requested_end_at' => $endAt->toDateTimeString(),
+                'duration_minutes' => $service->duration_minutes,
+            ],
+        ]);
     }
 
     public function updateStatus(UpdateAppointmentStatusRequest $request, Appointment $appointment): JsonResponse
