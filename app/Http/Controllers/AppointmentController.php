@@ -8,10 +8,12 @@ use App\Http\Requests\Appointment\StoreAppointmentRequest;
 use App\Http\Requests\Appointment\UpdateAppointmentRequest;
 use App\Http\Requests\Appointment\UpdateAppointmentStatusRequest;
 use App\Models\Appointment;
+use App\Models\Service;
 use App\Models\User;
 use App\Services\AppointmentService;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 
 class AppointmentController extends Controller
 {
@@ -27,7 +29,7 @@ class AppointmentController extends Controller
 
         $query = Appointment::query()
             ->where('clinic_id', $authUser->clinic_id)
-            ->with(['patient:id,name,email', 'dentist:id,name,email'])
+            ->with($this->appointmentRelations())
             ->orderBy('start_at');
 
         if ($authUser->role === 'dentist') {
@@ -68,12 +70,28 @@ class AppointmentController extends Controller
         $patient = $this->resolveScopedPatient($authUser->clinic_id, (int) $data['patient_user_id']);
         $dentistId = $authUser->role === 'dentist' ? $authUser->id : (int) $data['dentist_user_id'];
         $dentist = $this->resolveScopedDentist($authUser->clinic_id, $dentistId);
+        $service = $this->resolveScopedService($authUser->clinic_id, (int) $data['service_id']);
 
-        if (! $patient || ! $dentist) {
+        if (! $patient || ! $dentist || ! $service) {
             return $this->errorResponse('Paciente o dentista inválido.', ['appointment' => ['Paciente y dentista deben pertenecer a la clínica.']]);
         }
 
-        if ($this->appointmentService->hasDentistOverlap($authUser->clinic_id, $dentist->id, (string) $data['start_at'], (string) $data['end_at'])) {
+        if (! $this->dentistHasServiceSpecialty($dentist, $service)) {
+            return $this->errorResponse(
+                'Especialidad incompatible.',
+                ['dentist_user_id' => ['El dentista seleccionado no cuenta con la especialidad requerida para este servicio.']]
+            );
+        }
+
+        $startAt = Carbon::parse((string) $data['start_at']);
+        $endAt = $startAt->copy()->addMinutes($service->duration_minutes);
+
+        if ($this->appointmentService->hasDentistOverlap(
+            $authUser->clinic_id,
+            $dentist->id,
+            $startAt->toDateTimeString(),
+            $endAt->toDateTimeString(),
+        )) {
             return $this->errorResponse('Choque de horario.', ['appointment' => ['El dentista ya tiene una cita en ese horario.']]);
         }
 
@@ -81,15 +99,16 @@ class AppointmentController extends Controller
             'clinic_id' => $authUser->clinic_id,
             'patient_user_id' => $patient->id,
             'dentist_user_id' => $dentist->id,
+            'service_id' => $service->id,
             'created_by' => $authUser->id,
-            'start_at' => $data['start_at'],
-            'end_at' => $data['end_at'],
+            'start_at' => $startAt,
+            'end_at' => $endAt,
             'status' => 'scheduled',
             'reason' => $data['reason'] ?? null,
             'internal_notes' => $data['internal_notes'] ?? ($data['notes'] ?? null),
         ]);
 
-        return $this->successResponse($appointment->load(['patient:id,name,email', 'dentist:id,name,email']), 'Cita creada.', 201);
+        return $this->successResponse($appointment->load($this->appointmentRelations()), 'Cita creada.', 201);
     }
 
     public function show(Appointment $appointment): JsonResponse
@@ -101,7 +120,7 @@ class AppointmentController extends Controller
         }
 
         return $this->successResponse(
-            $appointment->load(['patient:id,name,email,phone', 'dentist:id,name,email,phone']),
+            $appointment->load($this->appointmentRelations()),
             'Cita obtenida.'
         );
     }
@@ -120,8 +139,8 @@ class AppointmentController extends Controller
         $dentistId = $authUser->role === 'dentist'
             ? $authUser->id
             : (int) ($data['dentist_user_id'] ?? $appointment->dentist_user_id);
-        $startAt = (string) ($data['start_at'] ?? $appointment->start_at->toDateTimeString());
-        $endAt = (string) ($data['end_at'] ?? $appointment->end_at->toDateTimeString());
+        $serviceId = (int) ($data['service_id'] ?? $appointment->service_id);
+        $startAt = Carbon::parse((string) ($data['start_at'] ?? $appointment->start_at->toDateTimeString()));
 
         $patient = $this->resolveScopedPatient($authUser->clinic_id, $patientId);
 
@@ -130,20 +149,33 @@ class AppointmentController extends Controller
         }
 
         $dentist = $this->resolveScopedDentist($authUser->clinic_id, $dentistId);
+        $service = $this->resolveScopedService($authUser->clinic_id, $serviceId);
 
         if (! $dentist) {
             return $this->errorResponse('Dentista inválido.', ['dentist_user_id' => ['El dentista debe pertenecer a la clínica y tener rol dentist.']]);
         }
 
-        if (Carbon::parse($endAt)->lessThanOrEqualTo(Carbon::parse($startAt))) {
-            return $this->errorResponse('Rango de horario inválido.', ['end_at' => ['end_at debe ser mayor que start_at.']]);
+        if (! $service) {
+            return $this->errorResponse('Servicio inválido.', ['service_id' => ['El servicio debe pertenecer a la clínica.']]);
         }
+
+        if (! $this->dentistHasServiceSpecialty($dentist, $service)) {
+            return $this->errorResponse(
+                'Especialidad incompatible.',
+                ['dentist_user_id' => ['El dentista seleccionado no cuenta con la especialidad requerida para este servicio.']]
+            );
+        }
+
+        $shouldRecalculateSchedule = array_key_exists('service_id', $data) || array_key_exists('start_at', $data);
+        $endAt = $shouldRecalculateSchedule
+            ? $startAt->copy()->addMinutes($service->duration_minutes)
+            : Carbon::parse($appointment->end_at->toDateTimeString());
 
         if ($this->appointmentService->hasDentistOverlap(
             $authUser->clinic_id,
             $dentist->id,
-            $startAt,
-            $endAt,
+            $startAt->toDateTimeString(),
+            $endAt->toDateTimeString(),
             $appointment->id,
         )) {
             return $this->errorResponse('Choque de horario.', ['appointment' => ['El dentista ya tiene una cita en ese horario.']]);
@@ -156,12 +188,46 @@ class AppointmentController extends Controller
         $appointment->fill($data);
         $appointment->patient_user_id = $patient->id;
         $appointment->dentist_user_id = $dentist->id;
+        $appointment->service_id = $service->id;
+        if ($shouldRecalculateSchedule) {
+            $appointment->start_at = $startAt;
+            $appointment->end_at = $endAt;
+        }
         $appointment->save();
 
         return $this->successResponse(
-            $appointment->load(['patient:id,name,email,phone', 'dentist:id,name,email,phone']),
+            $appointment->load($this->appointmentRelations()),
             'Cita actualizada.'
         );
+    }
+
+    public function availableDentists(Request $request): JsonResponse
+    {
+        $authUser = $request->user();
+        $validated = $request->validate([
+            'service_id' => ['required', 'integer', 'exists:services,id'],
+            'date' => ['nullable', 'date'],
+        ]);
+
+        $service = $this->resolveScopedService($authUser->clinic_id, (int) $validated['service_id']);
+
+        if (! $service) {
+            return $this->errorResponse('Servicio inválido.', ['service_id' => ['El servicio debe pertenecer a la clínica.']]);
+        }
+
+        $dentists = User::query()
+            ->where('clinic_id', $authUser->clinic_id)
+            ->where('role', 'dentist')
+            ->whereHas('dentistProfile.specialties', fn ($query) => $query->where('specialties.id', $service->specialty_id))
+            ->select(['id', 'name', 'email'])
+            ->orderBy('name')
+            ->get();
+
+        return $this->successResponse([
+            'service' => $service->only(['id', 'name', 'specialty_id', 'duration_minutes']),
+            'date' => $validated['date'] ?? null,
+            'dentists' => $dentists,
+        ], 'Dentistas compatibles listados.');
     }
 
     public function updateStatus(UpdateAppointmentStatusRequest $request, Appointment $appointment): JsonResponse
@@ -206,5 +272,30 @@ class AppointmentController extends Controller
             ->where('clinic_id', $clinicId)
             ->where('role', 'dentist')
             ->first();
+    }
+
+    private function resolveScopedService(int $clinicId, int $serviceId): ?Service
+    {
+        return Service::query()
+            ->where('id', $serviceId)
+            ->where('clinic_id', $clinicId)
+            ->first();
+    }
+
+    private function dentistHasServiceSpecialty(User $dentist, Service $service): bool
+    {
+        return $dentist->dentistProfile()
+            ->whereHas('specialties', fn ($query) => $query->where('specialties.id', $service->specialty_id))
+            ->exists();
+    }
+
+    private function appointmentRelations(): array
+    {
+        return [
+            'patient:id,name,email',
+            'dentist:id,name,email',
+            'service:id,name,specialty_id,duration_minutes',
+            'service.specialty:id,name',
+        ];
     }
 }

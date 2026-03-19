@@ -16,6 +16,7 @@ class StoreAppointmentRequest extends FormRequest
     {
         return [
             'patient_user_id' => ['required', 'integer', 'exists:users,id'],
+            'service_id' => ['required', 'integer', 'exists:services,id'],
             'dentist_user_id' => [
                 Rule::requiredIf(fn (): bool => $this->user()?->role !== 'dentist'),
                 'nullable',
@@ -23,9 +24,9 @@ class StoreAppointmentRequest extends FormRequest
                 'exists:users,id',
             ],
             'start_at' => ['required', 'date'],
-            'end_at' => ['required', 'date', 'after:start_at'],
             'reason' => ['nullable', 'string', 'max:255'],
             'internal_notes' => ['nullable', 'string'],
+            'notes' => ['nullable', 'string'],
         ];
     }
 }
