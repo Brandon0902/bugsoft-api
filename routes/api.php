@@ -100,7 +100,7 @@ Route::middleware(['auth:sanctum', 'role:admin,receptionist,dentist'])->group(fu
 });
 
 
-Route::middleware(['auth:sanctum', 'role:super_admin'])->group(function (): void {
+Route::middleware(['auth:sanctum', 'role:super_admin,admin'])->group(function (): void {
     Route::get('/specialties', [SpecialtyController::class, 'index']);
     Route::post('/specialties', [SpecialtyController::class, 'store']);
     Route::get('/specialties/{specialty}', [SpecialtyController::class, 'show']);

@@ -14,15 +14,25 @@ class SpecialtyServiceCatalogTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_super_admin_can_create_specialty_and_admin_is_forbidden(): void
+    public function test_admin_and_super_admin_have_full_specialty_crud_access(): void
     {
         $superAdmin = User::factory()->create(['role' => 'super_admin']);
         $clinic = Clinic::query()->create(['name' => 'Clinic One']);
         $admin = User::factory()->create(['role' => 'admin', 'clinic_id' => $clinic->id]);
+        $existing = Specialty::query()->create([
+            'name' => 'Implantología',
+            'description' => 'Tratamientos de implantes',
+            'status' => true,
+        ]);
 
-        Sanctum::actingAs($superAdmin);
+        Sanctum::actingAs($admin);
 
-        $this->postJson('/api/specialties', [
+        $this->getJson('/api/specialties')
+            ->assertOk()
+            ->assertJsonPath('success', true)
+            ->assertJsonPath('data.0.id', $existing->id);
+
+        $createResponse = $this->postJson('/api/specialties', [
             'name' => 'Ortodoncia',
             'description' => 'Especialidad dental',
             'status' => true,
@@ -30,15 +40,76 @@ class SpecialtyServiceCatalogTest extends TestCase
             ->assertCreated()
             ->assertJsonPath('data.name', 'Ortodoncia');
 
-        $specialty = Specialty::query()->firstOrFail();
+        $specialtyId = (int) $createResponse->json('data.id');
 
-        Sanctum::actingAs($admin);
+        $this->getJson("/api/specialties/{$specialtyId}")
+            ->assertOk()
+            ->assertJsonPath('data.id', $specialtyId);
 
-        $this->patchJson("/api/specialties/{$specialty->id}", [
-            'description' => 'No autorizado',
+        $this->patchJson("/api/specialties/{$specialtyId}", [
+            'description' => 'Descripción actualizada',
         ])
-            ->assertForbidden()
-            ->assertJsonPath('message', 'Forbidden');
+            ->assertOk()
+            ->assertJsonPath('data.description', 'Descripción actualizada');
+
+        $this->deleteJson("/api/specialties/{$specialtyId}")
+            ->assertOk()
+            ->assertJsonPath('success', true);
+
+        $this->assertDatabaseMissing('specialties', ['id' => $specialtyId]);
+
+        Sanctum::actingAs($superAdmin);
+
+        $this->postJson('/api/specialties', [
+            'name' => 'Endodoncia',
+            'description' => 'Especialidad de conductos',
+            'status' => true,
+        ])
+            ->assertCreated()
+            ->assertJsonPath('data.name', 'Endodoncia');
+    }
+
+    public function test_receptionist_dentist_and_pacient_cannot_access_specialties_crud(): void
+    {
+        $clinic = Clinic::query()->create(['name' => 'Clinic Roles']);
+        $receptionist = User::factory()->create(['role' => 'receptionist', 'clinic_id' => $clinic->id]);
+        $dentist = User::factory()->create(['role' => 'dentist', 'clinic_id' => $clinic->id]);
+        $pacient = User::factory()->create(['role' => 'pacient', 'clinic_id' => $clinic->id]);
+        $specialty = Specialty::query()->create([
+            'name' => 'Periodoncia',
+            'description' => 'Encías',
+            'status' => true,
+        ]);
+
+        foreach ([$receptionist, $dentist, $pacient] as $user) {
+            Sanctum::actingAs($user);
+
+            $this->getJson('/api/specialties')
+                ->assertForbidden()
+                ->assertJsonPath('message', 'Forbidden');
+
+            $this->postJson('/api/specialties', [
+                'name' => "Especialidad {$user->id}",
+                'description' => 'No autorizado',
+                'status' => true,
+            ])
+                ->assertForbidden()
+                ->assertJsonPath('message', 'Forbidden');
+
+            $this->getJson("/api/specialties/{$specialty->id}")
+                ->assertForbidden()
+                ->assertJsonPath('message', 'Forbidden');
+
+            $this->patchJson("/api/specialties/{$specialty->id}", [
+                'description' => 'No autorizado',
+            ])
+                ->assertForbidden()
+                ->assertJsonPath('message', 'Forbidden');
+
+            $this->deleteJson("/api/specialties/{$specialty->id}")
+                ->assertForbidden()
+                ->assertJsonPath('message', 'Forbidden');
+        }
     }
 
     public function test_admin_can_create_service_in_own_clinic_and_cannot_read_other_clinic_service(): void
