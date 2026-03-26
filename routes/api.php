@@ -130,6 +130,11 @@ Route::middleware(['auth:sanctum', 'role:dentist'])->group(function (): void {
     Route::get('/appointments/{appointment}/notes/{note}', [AppointmentNoteController::class, 'show']);
 });
 
+Route::middleware(['auth:sanctum', 'role:dentist'])->prefix('dentist')->group(function (): void {
+    Route::get('/patients', [PatientController::class, 'index']);
+    Route::get('/patients/{id}', [PatientController::class, 'show']);
+});
+
 Route::middleware(['auth:sanctum', 'role:pacient'])->group(function (): void {
     Route::get('/pacient/appointments/{appointment}', [PacientAppointmentController::class, 'show']);
     Route::patch('/pacient/appointments/{appointment}/confirmation', [PacientAppointmentController::class, 'respondConfirmation']);
