@@ -4,18 +4,20 @@ use App\Http\Controllers\AdminClinicController;
 use App\Http\Controllers\AdminReceptionistController;
 use App\Http\Controllers\AdminUserController;
 use App\Http\Controllers\AppointmentController;
+use App\Http\Controllers\AppointmentNoteController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\DentistAppointmentController;
 use App\Http\Controllers\PacientAppointmentController;
+use App\Http\Controllers\PacientAppointmentNoteController;
 use App\Http\Controllers\PatientController;
 use App\Http\Controllers\PublicClinicController;
+use App\Http\Controllers\ServiceController;
+use App\Http\Controllers\SpecialtyController;
+use App\Http\Controllers\SuperClinicAppointmentController;
 use App\Http\Controllers\SuperClinicController;
 use App\Http\Controllers\SuperClinicPatientController;
 use App\Http\Controllers\SuperClinicReceptionistController;
 use App\Http\Controllers\SuperClinicUserController;
-use App\Http\Controllers\SuperClinicAppointmentController;
-use App\Http\Controllers\SpecialtyController;
-use App\Http\Controllers\ServiceController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('auth')->group(function (): void {
@@ -99,7 +101,6 @@ Route::middleware(['auth:sanctum', 'role:admin,receptionist,dentist'])->group(fu
     Route::patch('/appointments/{appointment}/status', [AppointmentController::class, 'updateStatus']);
 });
 
-
 Route::middleware(['auth:sanctum', 'role:super_admin,admin'])->group(function (): void {
     Route::get('/specialties', [SpecialtyController::class, 'index']);
     Route::post('/specialties', [SpecialtyController::class, 'store']);
@@ -119,3 +120,14 @@ Route::middleware(['auth:sanctum', 'role:admin'])->group(function (): void {
 // Legacy compatibility endpoint for dentist clients still consuming /dentist/appointments.
 Route::middleware(['auth:sanctum', 'role:dentist'])->get('/dentist/appointments', [DentistAppointmentController::class, 'index']);
 Route::middleware(['auth:sanctum', 'role:pacient'])->get('/pacient/appointments', [PacientAppointmentController::class, 'index']);
+
+Route::middleware(['auth:sanctum', 'role:dentist'])->group(function (): void {
+    Route::get('/appointments/{appointment}/notes', [AppointmentNoteController::class, 'index']);
+    Route::post('/appointments/{appointment}/notes', [AppointmentNoteController::class, 'store']);
+    Route::get('/appointments/{appointment}/notes/{note}', [AppointmentNoteController::class, 'show']);
+});
+
+Route::middleware(['auth:sanctum', 'role:pacient'])->group(function (): void {
+    Route::get('/pacient/appointments/{appointment}/notes', [PacientAppointmentNoteController::class, 'index']);
+    Route::get('/pacient/appointments/{appointment}/notes/{note}', [PacientAppointmentNoteController::class, 'show']);
+});
