@@ -109,10 +109,13 @@ Route::middleware(['auth:sanctum', 'role:super_admin,admin'])->group(function ()
     Route::delete('/specialties/{specialty}', [SpecialtyController::class, 'destroy']);
 });
 
-Route::middleware(['auth:sanctum', 'role:admin'])->group(function (): void {
+Route::middleware(['auth:sanctum', 'role:admin,dentist'])->group(function (): void {
     Route::get('/services', [ServiceController::class, 'index']);
-    Route::post('/services', [ServiceController::class, 'store']);
     Route::get('/services/{service}', [ServiceController::class, 'show']);
+});
+
+Route::middleware(['auth:sanctum', 'role:admin'])->group(function (): void {
+    Route::post('/services', [ServiceController::class, 'store']);
     Route::patch('/services/{service}', [ServiceController::class, 'update']);
     Route::delete('/services/{service}', [ServiceController::class, 'destroy']);
 });
@@ -128,6 +131,8 @@ Route::middleware(['auth:sanctum', 'role:dentist'])->group(function (): void {
 });
 
 Route::middleware(['auth:sanctum', 'role:pacient'])->group(function (): void {
+    Route::get('/pacient/appointments/{appointment}', [PacientAppointmentController::class, 'show']);
+    Route::patch('/pacient/appointments/{appointment}/confirmation', [PacientAppointmentController::class, 'respondConfirmation']);
     Route::get('/pacient/appointments/{appointment}/notes', [PacientAppointmentNoteController::class, 'index']);
     Route::get('/pacient/appointments/{appointment}/notes/{note}', [PacientAppointmentNoteController::class, 'show']);
 });

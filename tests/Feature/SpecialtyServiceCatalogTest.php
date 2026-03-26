@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\Clinic;
 use App\Models\DentistProfile;
+use App\Models\Service;
 use App\Models\Specialty;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -138,6 +139,121 @@ class SpecialtyServiceCatalogTest extends TestCase
         Sanctum::actingAs($adminB);
 
         $this->getJson("/api/services/{$serviceId}")->assertNotFound();
+    }
+
+    public function test_dentist_can_list_services(): void
+    {
+        $specialty = Specialty::query()->create(['name' => 'Ortodoncia']);
+        $clinic = Clinic::query()->create(['name' => 'Clinic Dentist Services']);
+        $dentist = User::factory()->create(['role' => 'dentist', 'clinic_id' => $clinic->id]);
+        $visibleService = Service::query()->create([
+            'clinic_id' => $clinic->id,
+            'specialty_id' => $specialty->id,
+            'name' => 'Consulta general',
+            'duration_minutes' => 30,
+            'price' => 500,
+            'status' => true,
+        ]);
+
+        Service::query()->create([
+            'clinic_id' => Clinic::query()->create(['name' => 'Other Clinic'])->id,
+            'specialty_id' => $specialty->id,
+            'name' => 'Servicio ajeno',
+            'duration_minutes' => 45,
+            'price' => 700,
+            'status' => true,
+        ]);
+
+        Sanctum::actingAs($dentist);
+
+        $this->getJson('/api/services')
+            ->assertOk()
+            ->assertJsonPath('data.0.id', $visibleService->id)
+            ->assertJsonMissing(['name' => 'Servicio ajeno']);
+    }
+
+    public function test_dentist_can_show_service(): void
+    {
+        $specialty = Specialty::query()->create(['name' => 'Prostodoncia']);
+        $clinic = Clinic::query()->create(['name' => 'Clinic Dentist Show']);
+        $dentist = User::factory()->create(['role' => 'dentist', 'clinic_id' => $clinic->id]);
+        $service = Service::query()->create([
+            'clinic_id' => $clinic->id,
+            'specialty_id' => $specialty->id,
+            'name' => 'Resina dental',
+            'duration_minutes' => 40,
+            'price' => 900,
+            'status' => true,
+        ]);
+
+        Sanctum::actingAs($dentist);
+
+        $this->getJson("/api/services/{$service->id}")
+            ->assertOk()
+            ->assertJsonPath('data.id', $service->id)
+            ->assertJsonPath('data.name', 'Resina dental');
+    }
+
+    public function test_dentist_cannot_create_service(): void
+    {
+        $specialty = Specialty::query()->create(['name' => 'CirugÃ­a oral']);
+        $clinic = Clinic::query()->create(['name' => 'Clinic Dentist Write']);
+        $dentist = User::factory()->create(['role' => 'dentist', 'clinic_id' => $clinic->id]);
+
+        Sanctum::actingAs($dentist);
+
+        $this->postJson('/api/services', [
+            'specialty_id' => $specialty->id,
+            'name' => 'No autorizado',
+            'duration_minutes' => 60,
+            'price' => 1200,
+        ])
+            ->assertForbidden()
+            ->assertJsonPath('message', 'Forbidden');
+    }
+
+    public function test_dentist_cannot_update_service(): void
+    {
+        $specialty = Specialty::query()->create(['name' => 'OdontopediatrÃ­a']);
+        $clinic = Clinic::query()->create(['name' => 'Clinic Dentist Update']);
+        $dentist = User::factory()->create(['role' => 'dentist', 'clinic_id' => $clinic->id]);
+        $service = Service::query()->create([
+            'clinic_id' => $clinic->id,
+            'specialty_id' => $specialty->id,
+            'name' => 'Limpieza',
+            'duration_minutes' => 30,
+            'price' => 400,
+            'status' => true,
+        ]);
+
+        Sanctum::actingAs($dentist);
+
+        $this->patchJson("/api/services/{$service->id}", [
+            'name' => 'No debe editar',
+        ])
+            ->assertForbidden()
+            ->assertJsonPath('message', 'Forbidden');
+    }
+
+    public function test_dentist_cannot_delete_service(): void
+    {
+        $specialty = Specialty::query()->create(['name' => 'RehabilitaciÃ³n oral']);
+        $clinic = Clinic::query()->create(['name' => 'Clinic Dentist Delete']);
+        $dentist = User::factory()->create(['role' => 'dentist', 'clinic_id' => $clinic->id]);
+        $service = Service::query()->create([
+            'clinic_id' => $clinic->id,
+            'specialty_id' => $specialty->id,
+            'name' => 'PrÃ³tesis',
+            'duration_minutes' => 90,
+            'price' => 3500,
+            'status' => true,
+        ]);
+
+        Sanctum::actingAs($dentist);
+
+        $this->deleteJson("/api/services/{$service->id}")
+            ->assertForbidden()
+            ->assertJsonPath('message', 'Forbidden');
     }
 
     public function test_admin_can_assign_specialty_ids_on_dentist_create_and_update(): void
