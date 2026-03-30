@@ -9,6 +9,22 @@ use Illuminate\Database\Eloquent\Collection;
 
 class AppointmentService
 {
+    public function findCompatibleDentists(int $clinicId, int $specialtyId): Collection
+    {
+        return User::query()
+            ->where('clinic_id', $clinicId)
+            ->where('role', 'dentist')
+            ->where('status', true)
+            ->whereHas('dentistProfile.specialties', fn ($query) => $query->where('specialties.id', $specialtyId))
+            ->with([
+                'dentistProfile:id,user_id,clinic_id,license_number,color',
+                'dentistProfile.specialties:id,name',
+            ])
+            ->select(['id', 'name', 'email'])
+            ->orderBy('name')
+            ->get();
+    }
+
     public function hasDentistOverlap(
         int $clinicId,
         int $dentistId,
@@ -64,17 +80,8 @@ class AppointmentService
             )
             ->pluck('dentist_user_id');
 
-        return User::query()
-            ->where('clinic_id', $clinicId)
-            ->where('role', 'dentist')
+        return $this->findCompatibleDentists($clinicId, $specialtyId)
             ->whereNotIn('id', $busyDentistIds)
-            ->whereHas('dentistProfile.specialties', fn ($query) => $query->where('specialties.id', $specialtyId))
-            ->with([
-                'dentistProfile:id,user_id,clinic_id,license_number,color',
-                'dentistProfile.specialties:id,name',
-            ])
-            ->select(['id', 'name', 'email'])
-            ->orderBy('name')
-            ->get();
+            ->values();
     }
 }

@@ -139,7 +139,9 @@ class AppointmentController extends Controller
         $dentistId = $authUser->role === 'dentist'
             ? $authUser->id
             : (int) ($data['dentist_user_id'] ?? $appointment->dentist_user_id);
-        $serviceId = (int) ($data['service_id'] ?? $appointment->service_id);
+        $serviceId = array_key_exists('service_id', $data)
+            ? (int) $data['service_id']
+            : ($appointment->service_id !== null ? (int) $appointment->service_id : null);
         $startAt = Carbon::parse((string) ($data['start_at'] ?? $appointment->start_at->toDateTimeString()));
 
         $patient = $this->resolveScopedPatient($authUser->clinic_id, $patientId);
@@ -149,17 +151,20 @@ class AppointmentController extends Controller
         }
 
         $dentist = $this->resolveScopedDentist($authUser->clinic_id, $dentistId);
-        $service = $this->resolveScopedService($authUser->clinic_id, $serviceId);
 
         if (! $dentist) {
             return $this->errorResponse('Dentista inválido.', ['dentist_user_id' => ['El dentista debe pertenecer a la clínica y tener rol dentist.']]);
         }
 
-        if (! $service) {
+        $service = $serviceId !== null
+            ? $this->resolveScopedService($authUser->clinic_id, $serviceId)
+            : null;
+
+        if ($serviceId !== null && ! $service) {
             return $this->errorResponse('Servicio inválido.', ['service_id' => ['El servicio debe pertenecer a la clínica.']]);
         }
 
-        if (! $this->dentistHasServiceSpecialty($dentist, $service)) {
+        if ($service && ! $this->dentistHasServiceSpecialty($dentist, $service)) {
             return $this->errorResponse(
                 'Especialidad incompatible.',
                 ['dentist_user_id' => ['El dentista seleccionado no cuenta con la especialidad requerida para este servicio.']]
@@ -167,11 +172,17 @@ class AppointmentController extends Controller
         }
 
         $shouldRecalculateSchedule = array_key_exists('service_id', $data) || array_key_exists('start_at', $data);
+        if ($shouldRecalculateSchedule && ! $service) {
+            return $this->errorResponse('Servicio inválido.', ['service_id' => ['La cita requiere un servicio válido para recalcular el horario.']]);
+        }
+
         $endAt = $shouldRecalculateSchedule
             ? $startAt->copy()->addMinutes($service->duration_minutes)
             : Carbon::parse($appointment->end_at->toDateTimeString());
 
-        if ($this->appointmentService->hasDentistOverlap(
+        $shouldValidateOverlap = $shouldRecalculateSchedule || $dentist->id !== $appointment->dentist_user_id;
+
+        if ($shouldValidateOverlap && $this->appointmentService->hasDentistOverlap(
             $authUser->clinic_id,
             $dentist->id,
             $startAt->toDateTimeString(),
@@ -188,7 +199,9 @@ class AppointmentController extends Controller
         $appointment->fill($data);
         $appointment->patient_user_id = $patient->id;
         $appointment->dentist_user_id = $dentist->id;
-        $appointment->service_id = $service->id;
+        if ($service) {
+            $appointment->service_id = $service->id;
+        }
         if ($shouldRecalculateSchedule) {
             $appointment->start_at = $startAt;
             $appointment->end_at = $endAt;
