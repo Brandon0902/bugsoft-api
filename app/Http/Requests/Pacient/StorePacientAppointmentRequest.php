@@ -18,7 +18,7 @@ class StorePacientAppointmentRequest extends FormRequest
             'dentist_user_id' => ['required', 'integer', 'exists:users,id'],
             'start_at' => ['required', 'date', 'after:now'],
             'reason' => ['nullable', 'string', 'max:255'],
-            'notes' => ['nullable', 'string'],
+            'internal_notes' => ['nullable', 'string'],
         ];
     }
 }

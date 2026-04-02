@@ -159,7 +159,7 @@ class PacientAppointmentController extends Controller
             'end_at' => $endAt,
             'status' => 'scheduled',
             'reason' => $data['reason'] ?? null,
-            'internal_notes' => $data['notes'] ?? null,
+            'internal_notes' => $data['internal_notes'] ?? null,
         ]);
 
         return $this->successResponse(

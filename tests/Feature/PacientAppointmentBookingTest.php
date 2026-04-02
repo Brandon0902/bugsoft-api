@@ -79,6 +79,64 @@ class PacientAppointmentBookingTest extends TestCase
             ->assertJsonPath('data.dentist.id', $dentist->id);
     }
 
+    public function test_pacient_can_create_own_appointment_with_reason_and_internal_notes(): void
+    {
+        [$clinic, $pacient] = $this->makeClinicAndPacient();
+        $dentist = User::factory()->create(['clinic_id' => $clinic->id, 'role' => 'dentist', 'status' => true]);
+        $service = $this->createServiceForClinicAndAssignToDentist($clinic, $dentist, 45);
+
+        Sanctum::actingAs($pacient);
+
+        $response = $this->postJson('/api/pacient/appointments', [
+            'service_id' => $service->id,
+            'dentist_user_id' => $dentist->id,
+            'start_at' => '2026-04-15 12:00:00',
+            'reason' => 'Dolor en una muela',
+            'internal_notes' => 'El paciente comenta molestia desde hace 3 días',
+        ])
+            ->assertCreated()
+            ->assertJsonPath('data.patient_user_id', $pacient->id)
+            ->assertJsonPath('data.reason', 'Dolor en una muela')
+            ->assertJsonPath('data.internal_notes', 'El paciente comenta molestia desde hace 3 días');
+
+        $this->assertDatabaseHas('appointments', [
+            'id' => $response->json('data.id'),
+            'clinic_id' => $clinic->id,
+            'patient_user_id' => $pacient->id,
+            'dentist_user_id' => $dentist->id,
+            'service_id' => $service->id,
+            'reason' => 'Dolor en una muela',
+            'internal_notes' => 'El paciente comenta molestia desde hace 3 días',
+            'status' => 'scheduled',
+        ]);
+    }
+
+    public function test_pacient_can_create_own_appointment_without_reason_or_internal_notes_and_they_remain_null(): void
+    {
+        [$clinic, $pacient] = $this->makeClinicAndPacient();
+        $dentist = User::factory()->create(['clinic_id' => $clinic->id, 'role' => 'dentist', 'status' => true]);
+        $service = $this->createServiceForClinicAndAssignToDentist($clinic, $dentist, 30);
+
+        Sanctum::actingAs($pacient);
+
+        $response = $this->postJson('/api/pacient/appointments', [
+            'service_id' => $service->id,
+            'dentist_user_id' => $dentist->id,
+            'start_at' => '2026-04-16 09:00:00',
+        ])
+            ->assertCreated()
+            ->assertJsonPath('data.reason', null)
+            ->assertJsonPath('data.internal_notes', null);
+
+        $this->assertDatabaseHas('appointments', [
+            'id' => $response->json('data.id'),
+            'clinic_id' => $clinic->id,
+            'patient_user_id' => $pacient->id,
+            'reason' => null,
+            'internal_notes' => null,
+        ]);
+    }
+
     public function test_pacient_payload_patient_user_id_is_ignored_and_appointment_is_created_for_authenticated_user(): void
     {
         [$clinic, $pacient] = $this->makeClinicAndPacient();
