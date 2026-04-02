@@ -15,7 +15,7 @@ class PublicClinicController extends Controller
         $clinics = Clinic::query()
             ->where('status', true)
             ->orderBy('name')
-            ->get(['id', 'name']);
+            ->get(['id', 'name', 'email', 'phone', 'address']);
 
         return $this->successResponse($clinics, 'Active clinics listed.');
     }
