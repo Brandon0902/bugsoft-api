@@ -9,6 +9,7 @@ use App\Http\Controllers\AuthController;
 use App\Http\Controllers\DentistAppointmentController;
 use App\Http\Controllers\PacientAppointmentController;
 use App\Http\Controllers\PacientAppointmentNoteController;
+use App\Http\Controllers\PacientClinicController;
 use App\Http\Controllers\PacientServiceController;
 use App\Http\Controllers\PatientController;
 use App\Http\Controllers\PublicClinicController;
@@ -142,6 +143,7 @@ Route::middleware(['auth:sanctum', 'role:dentist'])->prefix('dentist')->group(fu
 });
 
 Route::middleware(['auth:sanctum', 'role:pacient'])->group(function (): void {
+    Route::get('/pacient/clinic', [PacientClinicController::class, 'show']);
     Route::get('/pacient/services', [PacientServiceController::class, 'index']);
     Route::get('/pacient/services/{service}/dentists', [PacientServiceController::class, 'dentists']);
     Route::post('/pacient/appointments', [PacientAppointmentController::class, 'store']);
