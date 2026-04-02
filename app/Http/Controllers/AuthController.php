@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Http\Controllers\Concerns\ApiResponse;
 use App\Http\Requests\Auth\LoginRequest;
 use App\Http\Requests\Auth\RegisterPatientRequest;
+use App\Http\Requests\Auth\UpdateOwnPatientProfileRequest;
 use App\Models\PatientProfile;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
@@ -100,6 +101,62 @@ class AuthController extends Controller
 
     public function me(): JsonResponse
     {
-        return $this->successResponse(request()->user(), 'Perfil obtenido.');
+        return $this->successResponse($this->loadAuthenticatedProfile(request()->user()), 'Perfil obtenido.');
+    }
+
+    public function updateOwnPatientProfile(UpdateOwnPatientProfileRequest $request): JsonResponse
+    {
+        /** @var User $user */
+        $user = $request->user();
+
+        if ($user->role !== 'pacient') {
+            return $this->errorResponse(
+                'Forbidden',
+                ['role' => ['No autorizado para este recurso.']],
+                403
+            );
+        }
+
+        $data = $request->validated();
+
+        DB::transaction(function () use ($user, $data): void {
+            $user->fill(Arr::only($data, ['name', 'phone']));
+
+            if (array_key_exists('password', $data)) {
+                $user->password = $data['password'];
+            }
+
+            $user->save();
+
+            if (array_key_exists('profile', $data)) {
+                $user->patientProfile()->updateOrCreate(
+                    ['user_id' => $user->id],
+                    [
+                        'clinic_id' => $user->clinic_id,
+                        'address' => data_get($data, 'profile.address'),
+                        'allergies' => data_get($data, 'profile.allergies'),
+                        'notes' => data_get($data, 'profile.notes'),
+                    ]
+                );
+            }
+        });
+
+        return $this->successResponse(
+            $this->loadAuthenticatedProfile($user->fresh()),
+            'Perfil actualizado.'
+        );
+    }
+
+    protected function loadAuthenticatedProfile(?User $user): ?User
+    {
+        if (! $user) {
+            return null;
+        }
+
+        if ($user->role === 'pacient') {
+            return $user->load('patientProfile');
+        }
+
+        return $user;
     }
 }

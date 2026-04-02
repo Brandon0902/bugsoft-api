@@ -29,6 +29,10 @@ Route::prefix('auth')->group(function (): void {
         Route::post('/logout', [AuthController::class, 'logout']);
         Route::get('/me', [AuthController::class, 'me']);
     });
+
+    Route::middleware(['auth:sanctum', 'role:pacient'])->group(function (): void {
+        Route::patch('/me', [AuthController::class, 'updateOwnPatientProfile']);
+    });
 });
 
 Route::get('/public/clinics', [PublicClinicController::class, 'index']);
