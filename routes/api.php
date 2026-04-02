@@ -140,6 +140,7 @@ Route::middleware(['auth:sanctum', 'role:pacient'])->group(function (): void {
     Route::get('/pacient/services', [PacientServiceController::class, 'index']);
     Route::get('/pacient/services/{service}/dentists', [PacientServiceController::class, 'dentists']);
     Route::post('/pacient/appointments', [PacientAppointmentController::class, 'store']);
+    Route::get('/pacient/appointments/export', [PacientAppointmentController::class, 'export']);
     Route::get('/pacient/appointments/{appointment}', [PacientAppointmentController::class, 'show']);
     Route::patch('/pacient/appointments/{appointment}/confirmation', [PacientAppointmentController::class, 'respondConfirmation']);
     Route::get('/pacient/appointments/{appointment}/notes', [PacientAppointmentNoteController::class, 'index']);

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Http\Controllers\Concerns\ApiResponse;
+use App\Http\Requests\Pacient\ExportPacientAppointmentsRequest;
 use App\Http\Requests\Pacient\RespondAppointmentConfirmationRequest;
 use App\Http\Requests\Pacient\StorePacientAppointmentRequest;
 use App\Models\Appointment;
@@ -53,6 +54,60 @@ class PacientAppointmentController extends Controller
             $this->appointmentPayload($appointmentModel),
             'Cita del paciente obtenida.'
         );
+    }
+
+    public function export(ExportPacientAppointmentsRequest $request): JsonResponse
+    {
+        $authUser = $request->user();
+        $filters = $request->validated();
+
+        $appointments = Appointment::query()
+            ->where('clinic_id', $authUser->clinic_id)
+            ->where('patient_user_id', $authUser->id)
+            ->when(
+                isset($filters['from']),
+                fn ($query) => $query->where('start_at', '>=', Carbon::parse($filters['from'])->startOfDay())
+            )
+            ->when(
+                isset($filters['to']),
+                fn ($query) => $query->where('start_at', '<=', Carbon::parse($filters['to'])->endOfDay())
+            )
+            ->when(
+                isset($filters['status']),
+                fn ($query) => $query->where('status', $filters['status'])
+            )
+            ->with([
+                'clinic:id,name',
+                'dentist:id,name,email',
+                'service:id,clinic_id,specialty_id,name,duration_minutes,price,status',
+                'service.specialty:id,name',
+                'notes' => fn ($query) => $query
+                    ->with('author:id,name,email')
+                    ->orderBy('created_at'),
+            ])
+            ->orderBy('start_at')
+            ->get();
+
+        $payload = [
+            'patient' => [
+                'id' => $authUser->id,
+                'name' => $authUser->name,
+                'email' => $authUser->email,
+            ],
+            'generated_at' => now()->toISOString(),
+            'filters' => [
+                'from' => $filters['from'] ?? null,
+                'to' => $filters['to'] ?? null,
+                'status' => $filters['status'] ?? null,
+            ],
+            'summary' => [
+                'total_appointments' => $appointments->count(),
+                'total_notes' => $appointments->sum(fn (Appointment $appointment) => $appointment->notes->count()),
+            ],
+            'appointments' => $appointments->map(fn (Appointment $appointment) => $this->exportAppointmentPayload($appointment))->values(),
+        ];
+
+        return $this->successResponse($payload, 'Historial de citas exportado.');
     }
 
     public function store(StorePacientAppointmentRequest $request): JsonResponse
@@ -239,6 +294,57 @@ class PacientAppointmentController extends Controller
             'dentist:id,name,email',
             'service:id,name,specialty_id,duration_minutes,price,status',
             'service.specialty:id,name',
+        ];
+    }
+
+    private function exportAppointmentPayload(Appointment $appointment): array
+    {
+        return [
+            'id' => $appointment->id,
+            'status' => $appointment->status,
+            'start_at' => $appointment->start_at?->toDateTimeString(),
+            'end_at' => $appointment->end_at?->toDateTimeString(),
+            'clinic' => $appointment->clinic
+                ? [
+                    'id' => $appointment->clinic->id,
+                    'name' => $appointment->clinic->name,
+                ]
+                : null,
+            'dentist' => $appointment->dentist
+                ? [
+                    'id' => $appointment->dentist->id,
+                    'name' => $appointment->dentist->name,
+                    'email' => $appointment->dentist->email,
+                ]
+                : null,
+            'service' => $appointment->service
+                ? [
+                    'id' => $appointment->service->id,
+                    'name' => $appointment->service->name,
+                    'duration_minutes' => $appointment->service->duration_minutes,
+                    'price' => $appointment->service->price,
+                ]
+                : null,
+            'specialty' => $appointment->service?->specialty
+                ? [
+                    'id' => $appointment->service->specialty->id,
+                    'name' => $appointment->service->specialty->name,
+                ]
+                : null,
+            'notes' => $appointment->notes->map(function ($note): array {
+                return [
+                    'id' => $note->id,
+                    'note' => $note->note,
+                    'created_at' => $note->created_at?->toISOString(),
+                    'author' => $note->author
+                        ? [
+                            'id' => $note->author->id,
+                            'name' => $note->author->name,
+                            'email' => $note->author->email,
+                        ]
+                        : null,
+                ];
+            })->values()->all(),
         ];
     }
 
