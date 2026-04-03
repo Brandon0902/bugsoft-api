@@ -149,6 +149,7 @@ Route::middleware(['auth:sanctum', 'role:pacient'])->group(function (): void {
     Route::post('/pacient/appointments', [PacientAppointmentController::class, 'store']);
     Route::get('/pacient/appointments/export', [PacientAppointmentController::class, 'export']);
     Route::get('/pacient/appointments/{appointment}', [PacientAppointmentController::class, 'show']);
+    Route::patch('/pacient/appointments/{appointment}/cancel', [PacientAppointmentController::class, 'cancel']);
     Route::patch('/pacient/appointments/{appointment}/confirmation', [PacientAppointmentController::class, 'respondConfirmation']);
     Route::get('/pacient/appointments/{appointment}/notes', [PacientAppointmentNoteController::class, 'index']);
     Route::get('/pacient/appointments/{appointment}/notes/{note}', [PacientAppointmentNoteController::class, 'show']);

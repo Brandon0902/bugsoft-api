@@ -17,6 +17,11 @@ class PacientAppointmentController extends Controller
 {
     use ApiResponse;
 
+    private const CANCELABLE_STATUSES = [
+        'scheduled',
+        'confirmed',
+    ];
+
     private const NON_EDITABLE_CONFIRMATION_STATUSES = [
         'canceled',
         'confirmed',
@@ -39,7 +44,10 @@ class PacientAppointmentController extends Controller
             ->orderBy('start_at')
             ->get();
 
-        return $this->successResponse($appointments, 'Citas del paciente listadas.');
+        return $this->successResponse(
+            $appointments->map(fn (Appointment $appointment) => $this->patientAppointmentListPayload($appointment))->values(),
+            'Citas del paciente listadas.'
+        );
     }
 
     public function show(int $appointment): JsonResponse
@@ -210,6 +218,37 @@ class PacientAppointmentController extends Controller
         );
     }
 
+    public function cancel(int $appointment): JsonResponse
+    {
+        $appointmentModel = $this->resolveScopedAppointment($appointment);
+
+        if (! $appointmentModel) {
+            return $this->errorResponse('Cita no encontrada.', ['appointment' => ['No existe en tu alcance.']], 404);
+        }
+
+        if (! in_array($appointmentModel->status, self::CANCELABLE_STATUSES, true)) {
+            return $this->errorResponse(
+                'La cita ya no puede cancelarse.',
+                ['appointment' => ['La cita ya fue cancelada o se encuentra en un estado final.']]
+            );
+        }
+
+        if ($this->appointmentAlreadyStarted($appointmentModel)) {
+            return $this->errorResponse(
+                'La cita ya no puede cancelarse porque ya ocurrió o ya inició.',
+                ['appointment' => ['La cita ya inició o ya pasó.']]
+            );
+        }
+
+        $appointmentModel->status = 'canceled';
+        $appointmentModel->save();
+
+        return $this->successResponse(
+            $this->appointmentPayload($appointmentModel->fresh()),
+            'Cita cancelada correctamente.'
+        );
+    }
+
     private function resolveScopedAppointment(int $appointmentId): ?Appointment
     {
         $authUser = request()->user();
@@ -260,6 +299,7 @@ class PacientAppointmentController extends Controller
             ...$appointment->toArray(),
             'confirmation_window_open' => $this->confirmationWindowOpen($appointment),
             'can_patient_confirm' => $this->canPatientConfirm($appointment),
+            'can_patient_cancel' => $this->canPatientCancel($appointment),
             'confirmation_response_available_at' => $appointment->start_at
                 ->copy()
                 ->subDays(3)
@@ -267,10 +307,30 @@ class PacientAppointmentController extends Controller
         ];
     }
 
+    private function patientAppointmentListPayload(Appointment $appointment): array
+    {
+        $appointment->loadMissing(['dentist:id,name,email']);
+
+        return [
+            ...$appointment->toArray(),
+            'can_patient_cancel' => $this->canPatientCancel($appointment),
+        ];
+    }
+
     private function canPatientConfirm(Appointment $appointment): bool
     {
         return ! in_array($appointment->status, self::NON_EDITABLE_CONFIRMATION_STATUSES, true)
             && $this->confirmationWindowOpen($appointment)
+            && ! $this->appointmentAlreadyStarted($appointment);
+    }
+
+    private function canPatientCancel(Appointment $appointment): bool
+    {
+        $authUser = request()->user();
+
+        return (int) $appointment->patient_user_id === (int) $authUser->id
+            && (int) $appointment->clinic_id === (int) $authUser->clinic_id
+            && in_array($appointment->status, self::CANCELABLE_STATUSES, true)
             && ! $this->appointmentAlreadyStarted($appointment);
     }
 
