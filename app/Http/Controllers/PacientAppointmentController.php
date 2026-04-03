@@ -362,6 +362,7 @@ class PacientAppointmentController extends Controller
         return [
             'id' => $appointment->id,
             'status' => $appointment->status,
+            'reason' => $appointment->reason,
             'start_at' => $appointment->start_at?->toDateTimeString(),
             'end_at' => $appointment->end_at?->toDateTimeString(),
             'clinic' => $appointment->clinic

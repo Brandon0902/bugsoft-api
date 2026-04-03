@@ -20,7 +20,7 @@ class PacientAppointmentExportTest extends TestCase
     {
         [$clinic, $dentist, $pacient] = $this->makeClinicDentistAndPacient();
         $service = $this->createServiceForClinic($clinic);
-        $appointment = $this->createAppointment($clinic->id, $pacient->id, $dentist->id, $dentist->id, '2026-02-10 10:00:00', '2026-02-10 10:30:00', 'completed', $service->id);
+        $appointment = $this->createAppointment($clinic->id, $pacient->id, $dentist->id, $dentist->id, '2026-02-10 10:00:00', '2026-02-10 10:30:00', 'completed', $service->id, 'Limpieza dental');
         $this->createNote($appointment->id, $dentist->id, 'Nota uno', '2026-02-10 11:00:00');
 
         Sanctum::actingAs($pacient);
@@ -32,6 +32,7 @@ class PacientAppointmentExportTest extends TestCase
             ->assertJsonPath('data.summary.total_appointments', 1)
             ->assertJsonPath('data.summary.total_notes', 1)
             ->assertJsonPath('data.appointments.0.id', $appointment->id)
+            ->assertJsonPath('data.appointments.0.reason', 'Limpieza dental')
             ->assertJsonPath('data.appointments.0.service.id', $service->id)
             ->assertJsonPath('data.appointments.0.specialty.id', $service->specialty_id);
     }
@@ -225,7 +226,8 @@ class PacientAppointmentExportTest extends TestCase
         string $startAt = '2026-02-10 10:00:00',
         string $endAt = '2026-02-10 10:30:00',
         string $status = 'scheduled',
-        ?int $serviceId = null
+        ?int $serviceId = null,
+        ?string $reason = null
     ): Appointment {
         return Appointment::query()->create([
             'clinic_id' => $clinicId,
@@ -236,6 +238,7 @@ class PacientAppointmentExportTest extends TestCase
             'start_at' => $startAt,
             'end_at' => $endAt,
             'status' => $status,
+            'reason' => $reason,
         ]);
     }
 
